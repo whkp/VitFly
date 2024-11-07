@@ -3,3 +3,5 @@
 checklist.md
 *.dat
 *.code-workspace
+*.png
+envtest/ros/train_set/*

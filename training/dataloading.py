@@ -18,17 +18,21 @@ import getpass
 uname = getpass.getuser()
 
 def dataloader(data_dir, val_split=0., short=0, seed=None, train_val_dirs=None):
+    # 定义裁剪的高度和宽度
     cropHeight = 60
     cropWidth = 90
 
+    # 如果train_val_dirs不为空，则使用train_val_dirs中的文件夹，并计算验证集的比例
     if train_val_dirs is not None:
         traj_folders = train_val_dirs[0] + train_val_dirs[1]
         val_split = len(train_val_dirs[1]) / len(traj_folders)
     else:
+        # 否则，从data_dir中获取所有文件夹，并随机打乱
         traj_folders = sorted(glob.glob(opj(data_dir, '*')))
         random.seed(seed)
         random.shuffle(traj_folders)
 
+    # 如果short大于0，则只取前short个文件夹
     if short > 0:
         assert short <= len(traj_folders), f"short={short} is greater than the number of folders={len(traj_folders)}"
         traj_folders = traj_folders[:short]
@@ -37,6 +41,7 @@ def dataloader(data_dir, val_split=0., short=0, seed=None, train_val_dirs=None):
     traj_meta_full = []
     curr_quats = []    
 
+    # 开始加载数据
     start_dataloading = time.time()
 
     skippedImages = 0
@@ -44,7 +49,9 @@ def dataloader(data_dir, val_split=0., short=0, seed=None, train_val_dirs=None):
     collisionImages = 0
     collisionFolders = 0
 
+    # 遍历所有文件夹
     for i, traj_folder in enumerate(traj_folders):
+        # 每加载10个文件夹，打印一次信息
         if len(traj_folders)//10 > 0 and i % (len(traj_folders)//10) == 0:
             print(f'[DATALOADER] Loading folder {os.path.basename(traj_folder)}, folder # {i+1}/{len(traj_folders)}, time elapsed {time.time()-start_dataloading:.2f}s')
         im_files = sorted(glob.glob(opj(traj_folder, '*.png')))

@@ -21,10 +21,15 @@ from model import *
 # c = x3^2 + y3^2 + z3^2 + x1^2 + y1^2 + z1^2 - 2*(x3*x1 + y3*y1 + z3*z1) - r^2
 # line is a 2-tuple of 3-tuples, obstacle is a 2-tuple of the center 3-tuple and the radius float
 def check_collision(line, obstacle):
+    # 获取线段的起点和终点坐标
     (x1, y1, z1), (x2, y2, z2) = line
+    # 获取障碍物的中心坐标和半径
     (x3, y3, z3), r = obstacle
+    # 计算b的值
     b = 2 * ((x2 - x1) * (x1 - x3) + (y2 - y1) * (y1 - y3) + (z2 - z1) * (z1 - z3))
+    # 计算a的值
     a = (x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2
+    # 计算c的值
     c = (
         x3**2
         + y3**2
@@ -35,11 +40,12 @@ def check_collision(line, obstacle):
         - 2 * (x3 * x1 + y3 * y1 + z3 * z1)
         - r**2
     )
+    # 判断是否有碰撞
     return b**2 - 4 * a * c >= 0
 
 
 def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_model, hidden_state):
-    # print("Computing command vision-based!")
+    # print("Computing command vision-based!") 
 
     """
     # Example of SRT command
@@ -55,7 +61,7 @@ def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_
     command.collective_thrust = 15.0
     command.bodyrates = [0.0, 0.0, 0.0]
     """
-
+    #选择模式2，速度控制
     # Example of LINVEL command (velocity is expressed in world frame)
     command_mode = 2
     command = AgileCommand(command_mode)
@@ -68,12 +74,15 @@ def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_
     ## Load data ##
     ###############
 
+    #提取四元数，代表无人机姿态
     q = np.array([state.att[0], state.att[1], state.att[2], state.att[3]])
     
+    #转换图像到指定大小并转换为tensor
     h, w = (60, 90)
     img = cv2.resize(orig_img, (w, h))
     img2 = orig_img.copy() # used for generating debugimg
     img = ToTensor()(np.array(img))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if 'LSTMNet' in trained_model.__class__.__name__:
         if trained_model.__class__.__name__ == 'LSTMNet':
@@ -88,19 +97,21 @@ def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_
         else:
             raise Exception ("Incorrect Model specified!!")
         if state.pos[0] < 0.5 or hidden_state is None: 
-            hidden_state = (torch.zeros(trained_model.lstm.num_layers, trained_model.lstm.hidden_size).float(), torch.zeros(trained_model.lstm.num_layers, trained_model.lstm.hidden_size).float())
+            hidden_state = (torch.zeros(trained_model.lstm.num_layers, trained_model.lstm.hidden_size).float().to(device), torch.zeros(trained_model.lstm.num_layers, trained_model.lstm.hidden_size).float().to(device))
         with torch.no_grad():
-            x, hidden_state = trained_model([img.view(1, 1, h, w), torch.tensor(desiredVel).view(1, 1).float(), torch.tensor(q).view(1,-1).float() ,hidden_state])
+            x, hidden_state = trained_model([img.view(1, 1, h, w).to(device), torch.tensor(desiredVel).view(1, 1).float().to(device), torch.tensor(q).view(1,-1).float().to(device) ,hidden_state])
 
     else:
 
         with torch.no_grad():
-            x, hidden_state = trained_model([img.view(1, 1, h, w), torch.tensor(desiredVel).view(1, 1).float(), torch.tensor(q).view(1,-1).float()])
+            x, hidden_state = trained_model([img.view(1, 1, h, w).to(device), torch.tensor(desiredVel).view(1, 1).float().to(device), torch.tensor(q).view(1,-1).float().to(device)])
 
 
-    x = x.squeeze().detach().numpy()
+    x = x.squeeze().detach().cpu().numpy()
+    #对向量进行归一化
     x[0] = np.clip(x[0], -1, 1)
     x = x/np.linalg.norm(x)
+    #生成控制命令
     command.velocity = x*desiredVel
 
     # manual speedup
@@ -113,7 +124,7 @@ def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_
     # creating debug images,
     # debugimg1 of the stabilized, cropped image with a velocity vector, and 
     # debugimg2 of the original image with the four points used for stabilization
-
+    #调试图像一加入速度矢量箭头，调试图像二为原始图像的副本
     h, w = img2.shape
     arrow_start = (int(w/2), int(h/2))    
     arrow_end = (int(w/2-command.velocity[1]*(w/3)), int(h/2-command.velocity[2]*(h/3)))
@@ -168,6 +179,7 @@ def compute_command_state_based(state, obstacles, desiredVel, rl_policy=None, ke
         method_id = 3
 
     # calculate an obstacle-free waypoint
+    # y轴生成一系列等距点
     x_displacement = 8 #5
     grid_center_offset = 8
     grid_displacement = 0.5
@@ -183,7 +195,7 @@ def compute_command_state_based(state, obstacles, desiredVel, rl_policy=None, ke
         for xi, x in enumerate(np.arange(grid_center_offset, -grid_center_offset-grid_displacement, -grid_displacement)):
             for yi, y in enumerate(np.arange(grid_center_offset, -grid_center_offset-grid_displacement, -grid_displacement)):
                 wpts_2d[yi, xi] = [x, y]
-
+ 
         # the first layer of wpts_2d is actually the world y axis, the second is z axis
         # the third, the x axis, should all be +5m forward
         x_slice = x_displacement * np.ones((num_wpts, num_wpts))
@@ -275,6 +287,7 @@ def compute_command_state_based(state, obstacles, desiredVel, rl_policy=None, ke
             yvel = 0
             zvel = 0.25            
         else:
+            # 如果找到了没有碰撞的路径点，使用 find_closest_zero_index 函数找到距离中心点最近的未发生碰撞的路径点
             wpt_idx = find_closest_zero_index(collisions)
             wpt = wpts_2d[wpt_idx[0], wpt_idx[1]]
 

@@ -47,6 +47,7 @@ class AgilePilotNode:
         self.t1 = 0 #Time flag
         self.timestamp = 0 #Time stamp initial
         self.last_valid_img = None #Image that will be logged
+        self.ctr = 0
         data_log_format = {'timestamp':[],
                            'desired_vel':[],
                            'quat_1':[],
@@ -118,6 +119,7 @@ class AgilePilotNode:
         self.depth_im_threshold = 0.09
 
         self.curr_cmd = None
+        self.rgb_img = None
 
         # Logic subscribers
         self.start_sub = rospy.Subscriber(
@@ -196,11 +198,9 @@ class AgilePilotNode:
         )
         print("[RUN_COMPETITION] Initialization completed!")
 
-        self.ctr = 0
 
         self.keyboard_input = ''
         self.got_keypress = 0.0
-        self.rgb_img = None
 
     def rgb_callback(self, img):
         self.rgb_img = self.cv_bridge.imgmsg_to_cv2(img, desired_encoding="passthrough")
@@ -223,11 +223,13 @@ class AgilePilotNode:
         self.ctr += 1
         self.prevImg = deepcopy(self.last_valid_img)
         img = self.cv_bridge.imgmsg_to_cv2(img_data, desired_encoding="passthrough")
+        #用于将深度图像的值归一化到0到1的范围内
         img = np.clip(img/self.depth_im_threshold, 0, 1)
                 
         if self.prevImg is None:
             self.prevImg = img
 
+        #跟踪有效的图像数据
         self.last_valid_img = deepcopy(img) if img.min() > 0.0 else self.last_valid_img
         
         

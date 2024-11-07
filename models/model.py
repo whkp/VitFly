@@ -15,6 +15,7 @@ from torch.nn import LSTM
 import torch.nn.utils.spectral_norm as spectral_norm
 from ViTsubmodules import *
 
+#输入数据预处理，如果输入的四元数旋转矩阵未提供，则填充默认值；如果输入的深度图像尺寸不正确，则调整其尺寸。
 def refine_inputs(X):
 
     # fill quaternion rotation if not given
@@ -35,6 +36,7 @@ class ConvNet(nn.Module):
     Conv + FC Network 
     Num Params: 235,269
     """
+    #两层卷积层、四个全连接层
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 4, 3, 3)
@@ -53,9 +55,10 @@ class ConvNet(nn.Module):
         X = refine_inputs(X)
 
         x = X[0]
-        x = -self.maxpool(- self.bn1(F.relu(self.conv1(x))))
-        x = self.avgpool(F.relu(self.conv2(x)))
+        x = -self.maxpool(- self.bn1(F.relu(self.conv1(x)))) #(batch,1,60,90) -> (batch,4,22,32)
+        x = self.avgpool(F.relu(self.conv2(x))) #(batch,4,22,32) -> (batch,10,2,4)
 
+        #batch,10,2,4 -> batch,80
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
 
         metadata = torch.cat((X[1]*0.1, X[2]), dim=1).float()
@@ -188,7 +191,7 @@ class ViT(nn.Module):
 class UNetConvLSTMNet(nn.Module):
     """
     UNet+LSTM Network 
-    Num Params: 2,955,822 
+    Num Params: 2,955,822  
     """
 
     def __init__(self):

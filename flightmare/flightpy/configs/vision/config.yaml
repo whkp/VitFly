@@ -35,7 +35,7 @@ rgb_camera:
   enable_opticalflow: no
 
 unity:
-  scene_id: 2 # 0 empty, 1 industrial, 2 warehouse
+  scene_id: 1 # 0 empty, 1 industrial, 2 warehouse
   render: no
 
 simulation:
