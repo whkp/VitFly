@@ -264,7 +264,7 @@ class UNetConvLSTMNet(nn.Module):
         y = self.nn_fc3(y_fc2)
 
         return y, h
-
+    
 if __name__ == '__main__':
     print("MODEL NUM PARAMS ARE")
     model = ConvNet().float()

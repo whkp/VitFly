@@ -43,10 +43,13 @@ if [ -z $FLIGHTMARE_PATH ]
 then
   export FLIGHTMARE_PATH=$PWD/flightmare
 fi
-
+# set FLIGHTMARE_PATH force
+export FLIGHTMARE_PATH=$PWD/flightmare
+echo $FLIGHTMARE_PATH
 # Launch the simulator, unless it is already running
 if [ -z $(pgrep visionsim_node) ]
 then
+  echo "Launching simulator"
   roslaunch envsim visionenv_sim.launch render:=True gui:=False rviz:=True $realtimefactor &
   ROS_PID="$!"
   echo $ROS_PID

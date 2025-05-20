@@ -5,7 +5,7 @@
 @organization: GRASP Lab, University of Pennsylvania
 @brief: This script runs a rosnode that subscribes to depth images, processes them with a learned model, and outputs velocity commands.
 """
-
+#实际机器人运行脚本，通过订阅深度图像和里程计的话题，发布速度命令和调试图像
 import rospy
 import numpy as np
 from std_msgs.msg import Empty

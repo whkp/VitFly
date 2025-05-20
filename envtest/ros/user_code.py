@@ -102,9 +102,40 @@ def compute_command_vision_based(state, orig_img, prev_img, desiredVel, trained_
             x, hidden_state = trained_model([img.view(1, 1, h, w).to(device), torch.tensor(desiredVel).view(1, 1).float().to(device), torch.tensor(q).view(1,-1).float().to(device) ,hidden_state])
 
     else:
+        if 'Light' in trained_model.__class__.__name__:
+            with torch.no_grad():
+                # 获取模型的多任务输出
+                outputs = trained_model([img.view(1, 1, h, w).to(device), 
+                                      torch.tensor(desiredVel).view(1, 1).float().to(device), 
+                                      torch.tensor(q).view(1,-1).float().to(device)])
+                
+                # 提取控制指令
+                x = outputs['control']
+                
+                # 获取障碍物距离和碰撞风险
+                obstacle_distances = outputs['distance']
+                collision_risk = outputs['collision']
+                print("碰撞风险：", collision_risk)
 
-        with torch.no_grad():
-            x, hidden_state = trained_model([img.view(1, 1, h, w).to(device), torch.tensor(desiredVel).view(1, 1).float().to(device), torch.tensor(q).view(1,-1).float().to(device)])
+                
+                # 安全检查：如果碰撞风险高或障碍物距离太近，调整控制指令
+                if collision_risk > 0.7 or torch.any(obstacle_distances < 0.5):
+                    # 降低前进速度
+                    x[0] *= 0.5
+                    
+                    # 根据障碍物距离调整横向速度
+                    if obstacle_distances[0, 1] < 0.5:  # 左侧距离小
+                        x[1] += 0.2  # 向右转
+                    if obstacle_distances[0, 2] < 0.5:  # 右侧距离小
+                        x[1] -= 0.2  # 向左转
+                        
+                    # 如果前方距离小，后退或上升
+                    if obstacle_distances[0, 0] < 0.5:
+                        x[0] *= -0.5  # 反向并减速
+                        x[2] += 0.1   # 稍微上升
+        else:
+            with torch.no_grad():
+                x, hidden_state = trained_model([img.view(1, 1, h, w).to(device), torch.tensor(desiredVel).view(1, 1).float().to(device), torch.tensor(q).view(1,-1).float().to(device)])
 
 
     x = x.squeeze().detach().cpu().numpy()

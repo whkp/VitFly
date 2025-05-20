@@ -99,7 +99,7 @@ class AgilePilotNode:
             elif model_type == 'ViT':
                 self.model = ViT().to(self.device).float()
             elif model_type == 'ViTLSTM':
-                self.model = LSTMNetVIT().to(self.device).float()                
+                self.model = LSTMNetVIT().to(self.device).float()            
             else:
                 print(f'[RUN_COMPETITION] Invalid model_type {model_type}. Exiting.')
                 exit()
@@ -365,12 +365,12 @@ class AgilePilotNode:
                 self.t1 = self.state.t
 
                 # Get the current time stamp
-                timestamp = round(self.state.t, 3)  # If you need more hz, you might need to modify this round
+                timestamp = round(self.state.t, 4)  # If you need more hz, you might need to modify this round
 
                 # Save the image by the name of that instant
                 # np.save(self.folder + f"/im_{timestamp}", self.last_valid_img)
                 cv2.imwrite(f"{self.folder}/{str(timestamp)}.png", (self.last_valid_img*255).astype(np.uint8))
-                cv2.imwrite(f"{self.folder}/{str(timestamp)}_rgb.png", (self.rgb_img*255).astype(np.uint8))
+                #cv2.imwrite(f"{self.folder}/{str(timestamp)}_rgb.png", (self.rgb_img*255).astype(np.uint8))
 
                 # Get the collision flag
                 col = self.if_collide(obs_data.obstacles[0])
@@ -403,7 +403,7 @@ class AgilePilotNode:
                 self.count += 1
 
         # Save once every 10 instances - writing every instance can be expensive
-        if self.count % 2 == 0 and self.count != 0 or abs(self.state.pos[0] - 20) < 1:
+        if  self.count != 0 or abs(self.state.pos[0] - 20) < 1:
             self.data_log.to_csv(self.folder + "/data.csv")
 
     def if_collide(self, obs):
