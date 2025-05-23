@@ -16,15 +16,22 @@ class gen_plot_data(object):
 
         self.num_folders = len(traj_folders)
         self.traj_metadata = []
+        print(f"Reading {self.num_folders} folders")
+        print(f"Folders: {traj_folders}")
 
         for folder in traj_folders:
             try:
                 metadata = np.genfromtxt(opj(folder, "data.csv"), delimiter=",", dtype=np.float64)[1:, :-1]
                 coll_data = np.genfromtxt(opj(folder, "data.csv"), delimiter=",", dtype=bool)[1:, -1]
                 self.traj_metadata.append(np.column_stack((metadata, coll_data)))
-            except:
+            except Exception as e:
+                print(f"读取失败 {folder}: {e}")
                 continue
 
+        # 添加空列表检查，避免尝试对空列表进行row_stack操作
+        if not self.traj_metadata:
+            raise ValueError("没有找到有效的轨迹数据。请检查数据路径是否正确。")
+        
         self.traj_metadata = np.row_stack(self.traj_metadata, dtype=np.float64)
 
         self.obs_trajdata = np.genfromtxt(opj(obs_folder, "static_obstacles.csv"), delimiter=",", dtype=np.float64)[:, 1:]
@@ -179,10 +186,12 @@ if __name__ == "__main__":
     
     vit_folder = "./data/vit/"
     expert_folder = "./data/expert/"
-    lstm_folder = "./data/lstm_modified_md/"
+    lstm_folder = "./data/lstm/"
     vit_lstm_folder = "./data/vitlstm/"
-    unet_folder = "./data/unet_modified_md/"
+    #unet_folder = "./data/unet_modified_md/"
     conv_folder = "./data/convnet/"
+    
+    obstacle_folder = "/home/hkp/ws/vitfly_ws/src/vitfly/flightmare/flightpy/configs/vision/spheres_medium/environment_50/"
 
     obstacle_folder = "/home/hkp/Downloads/Softwares/build/catkin_ws/src/agile_flight/flightmare/flightpy/configs/vision/medium/environment_30/"
 
@@ -191,14 +200,14 @@ if __name__ == "__main__":
     lstm_traj_folders = sorted(glob.glob(opj(lstm_folder, "*")))
     vit_lstm_traj_folders = sorted(glob.glob(opj(vit_lstm_folder, "*")))
     conv_traj_folders = sorted(glob.glob(opj(conv_folder, "*")))
-    unet_traj_folders = sorted(glob.glob(opj(unet_folder, "*")))
+    #unet_traj_folders = sorted(glob.glob(opj(unet_folder, "*")))
 
-    vit_data = gen_plot_data(vit_traj_folders, obstacle_folder)
-    expert_data = gen_plot_data(expert_traj_folders, obstacle_folder)
-    lstm_data = gen_plot_data(lstm_traj_folders, obstacle_folder)
-    vitlstm_data = gen_plot_data(vit_lstm_traj_folders, obstacle_folder)
-    conv_data = gen_plot_data(conv_traj_folders, obstacle_folder)
-    unet_data = gen_plot_data(unet_traj_folders, obstacle_folder)
+    vit_data = gen_plot_data(vit_folder, obstacle_folder)
+    expert_data = gen_plot_data(expert_folder, obstacle_folder)
+    lstm_data = gen_plot_data(lstm_folder, obstacle_folder)
+    vitlstm_data = gen_plot_data(vit_lstm_folder, obstacle_folder)
+    conv_data = gen_plot_data(conv_folder, obstacle_folder)
+    #unet_data = gen_plot_data(unet_traj_folders, obstacle_folder)
 
     #ele, azim = 22, -49
     ele, azim = 32, -48
@@ -333,7 +342,7 @@ if __name__ == "__main__":
     lstm_data.plot_2d_xy_traj(color="r")
     vit_data.plot_2d_xy_traj(color="gray")
     expert_data.plot_2d_xy_traj(color="saddlebrown")
-    unet_data.plot_2d_xy_traj(color="darkgoldenrod")
+    #unet_data.plot_2d_xy_traj(color="darkgoldenrod")
     conv_data.plot_2d_xy_traj(color="steelblue")
 
     ax.set_xlabel("x-axis (m)", labelpad=-3.0)
@@ -365,7 +374,7 @@ if __name__ == "__main__":
     lstm_data.plot_2d_xz_traj(color="r")
     vit_data.plot_2d_xz_traj(color="gray")
     expert_data.plot_2d_xz_traj(color="saddlebrown")
-    unet_data.plot_2d_xz_traj(color="darkgoldenrod")
+    #unet_data.plot_2d_xz_traj(color="darkgoldenrod")
     conv_data.plot_2d_xz_traj(color="steelblue")
 
     ax.set_xlabel("x-axis (m)", labelpad=-3.0)
@@ -395,7 +404,7 @@ if __name__ == "__main__":
     lstm_data.plot_3d_traj(color="r")
     vit_data.plot_3d_traj(color="gray")
     expert_data.plot_3d_traj(color="saddlebrown")
-    unet_data.plot_3d_traj(color="darkgoldenrod")
+    #unet_data.plot_3d_traj(color="darkgoldenrod")
     conv_data.plot_3d_traj(color="steelblue")
 
     ax.set_xlim([0, 60])
@@ -405,7 +414,7 @@ if __name__ == "__main__":
     ax.set_ylabel("y-axis (m)", labelpad=10.0)
     ax.set_zlabel("z-axis (m)", labelpad=10.0)
     ax.set_title("Trajectories with obstacles")
-    plt.legend(["ViT+LSTM", "LSTMnet", "ViT", "Expert", "Unet", "Convnet"], loc="best", fancybox=True)
+    plt.legend(["ViT+LSTM", "LSTMnet", "ViT", "Expert", "Convnet"], loc="best", fancybox=True)
     plt.savefig("./plots_modified_md/traj_3d.pdf")
     plt.savefig("./plots_modified_md/traj_3d.png", dpi=900)
 

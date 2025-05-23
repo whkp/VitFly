@@ -1,5 +1,5 @@
 environment:
-  level: "trees" # provided: spheres_medium or trees
+  level: "spheres_medium" # provided: spheres_medium or trees
   env_folder: "environment_50" # environment_<0-100> for spheres_medium, environment_<0-100> for trees. no leading zeros.
   world_box: [-20, 80, -10, 10, 0.0, 15] # Bounding box applied during training, exiting this box terminates the episode. [xmin, xmax, ymin, ymax, zmin, zmax]
   goal_vel: [1.0, 0.0, 0.0] # goal velicty for tracking vx, vy, vz
@@ -35,7 +35,7 @@ rgb_camera:
   enable_opticalflow: no
 
 unity:
-  scene_id: 0 # 0 empty, 1 industrial, 2 warehouse
+  scene_id: 2 # 0 empty, 1 industrial, 2 warehouse
   render: no
 
 simulation:

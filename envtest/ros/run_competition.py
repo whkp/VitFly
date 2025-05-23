@@ -27,6 +27,7 @@ import torch
 
 sys.path.append(opj(os.path.dirname(os.path.abspath(__file__)), '../../models'))
 from model import *
+from improved_models import *
 
 class AgilePilotNode:
     def __init__(self, vision_based=False, model_type=None, model_path=None, desVel=None, keyboard=False):
@@ -99,13 +100,21 @@ class AgilePilotNode:
             elif model_type == 'ViT':
                 self.model = ViT().to(self.device).float()
             elif model_type == 'ViTLSTM':
-                self.model = LSTMNetVIT().to(self.device).float()            
+                self.model = LSTMNetVIT().to(self.device).float()
+            elif model_type == 'SpatialAttentionViT':
+                self.model = SpatialAttentionViT().to(self.device).float()     
             else:
                 print(f'[RUN_COMPETITION] Invalid model_type {model_type}. Exiting.')
                 exit()
 
             # Give full path if possible since the bash script runs from outside the folder
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            if model_type == 'EnhancedViT' or model_type == 'EnhancedViTLSTM' :
+                #权重文件里保存了模型的参数和优化器的状态等，需要处理
+                checkpoint = torch.load(model_path, map_location=self.device)
+                self.model.load_state_dict(checkpoint['model_state_dict'])
+            else: 
+                self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+            # self.model.load_state_dict(torch.load(model_path, map_location=self.device))
             self.model.eval()
 
             # Initialize hidden state
@@ -472,9 +481,9 @@ if __name__ == "__main__":
     parser.add_argument("--vision_based", help="Fly vision-based", required=False, dest="vision_based", action="store_true")
     parser.add_argument('--model_type', type=str, default='LSTMNet', help='string matching model name in lstmArch.py')
     parser.add_argument('--model_path', type=str, default=None, help='absolute path to model checkpoint')
-    parser.add_argument('--num_lstm_layers', type=float, default=None, help='number of lstm layers, needs to be passed in for some models like LSTMNetwFC')
+    parser.add_argument('--desVel', type=float, default=5.0, help='desired velocity')
     parser.add_argument("--keyboard", help="Fly state-based mode but take velocity commands from keyboard WASD", required=False, dest="keyboard", action="store_true")
 
     args = parser.parse_args()
-    agile_pilot_node = AgilePilotNode(vision_based=args.vision_based, model_type=args.model_type, model_path=args.model_path, desVel=args.num_lstm_layers, keyboard=args.keyboard)
+    agile_pilot_node = AgilePilotNode(vision_based=args.vision_based, model_type=args.model_type, model_path=args.model_path, desVel=args.desVel, keyboard=args.keyboard)
     rospy.spin()

@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# bash launch_evaluation.bash 1 vision
 # Pass number of rollouts as argument
 if [ $1 ]
 then
@@ -112,10 +112,13 @@ do
   echo "$ROLLOUT_NAME"
 
   cd ./envtest/ros/
-  python3 evaluation_node.py ${datetime}_N$i &
+  python3 evaluation_node.py --model_type SpatialAttentionViT &  #${datetime}_N$i &
   PY_PID="$!"
-
-  python3 run_competition.py $run_competition_args --num_lstm_layers 5.0 --model_type "ViTLSTM" --model_path ../../models/ViTLSTM_model.pth &
+  #--model_type "ViTLSTM" --model_path ../../models/ViTLSTM_model.pth &
+  #--model_type "ConvNet" --model_path ../../models/ConvNet_model.pth &
+  #--model_type "ViT" --model_path ../../models/ViT_model.pth &
+  #--model_type "LSTMNet" --model_path ../../models/LSTMnet_model.pth&
+  python3 run_competition.py $run_competition_args --desVel 5.0 --model_type "SpatialAttentionViT" --model_path ../../models/SpatialAttentionViT.pth &
   COMP_PID="$!"
 
   cd -

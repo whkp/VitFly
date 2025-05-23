@@ -410,9 +410,9 @@ def argparsing():
 
     # 通用参数
     parser.add_argument('--config', is_config_file=True, help='配置文件相对路径')
-    parser.add_argument('--basedir', type=str, default=f'/home/{uname}/agile_ws/src/agile_flight', help='仓库路径')
+    parser.add_argument('--basedir', type=str, default=f'/home/{uname}/ws/vitfly_ws/src/vitfly', help='仓库路径')
     parser.add_argument('--logdir', type=str, default='learner/logs', help='相对日志目录路径')
-    parser.add_argument('--datadir', type=str, default=f'/home/{uname}/agile_ws/src/agile_flight', help='相对数据集目录路径')
+    parser.add_argument('--datadir', type=str, default=f'/home/{uname}/ws/vitfly_ws/src/vitfly', help='相对数据集目录路径')
     
     # 实验级别和学习器参数
     parser.add_argument('--ws_suffix', type=str, default='', help='工作空间名称的后缀（如果有）')
@@ -423,7 +423,7 @@ def argparsing():
     parser.add_argument('--seed', type=int, default=None, help='用于python random, numpy和torch的随机种子 -- 警告，可能未完全实现')
     parser.add_argument('--device', type=str, default='cuda', help='通用CUDA设备；具体GPU应在CUDA_VISIBLE_DEVICES中指定')
     parser.add_argument('--load_checkpoint', action='store_true', default=False, help='是否从模型检查点加载')
-    parser.add_argument('--checkpoint_path', type=str, default=f'/home/{uname}/agile_ws/src/agile_flight/learner/logs/d05_10_t03_13/model_000499.pth', help='模型检查点的绝对路径')
+    parser.add_argument('--checkpoint_path', type=str, default=f'/home/{uname}/ws/vitfly_ws/src/vitfly/learner/logs/d05_10_t03_13/model_000499.pth', help='模型检查点的绝对路径')
     parser.add_argument('--lr', type=float, default=1e-4, help='学习率')
     parser.add_argument('--N_eps', type=int, default=100, help='训练的轮数')
     parser.add_argument('--lr_warmup_epochs', type=int, default=5, help='学习率预热的轮数')

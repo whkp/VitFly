@@ -230,19 +230,54 @@ class Evaluator:
 
     def printSummary(self):
         
+        # 创建以时间和模型名称命名的文件夹来存储结果
+        import time
+        from datetime import datetime
+        import argparse
+        
+        # 获取模型名称（从命令行参数）
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--model_type', type=str, default="unknown_model")
+        args, unknown = parser.parse_known_args()
+        model_type = args.model_type
+        
+        # 创建结果目录,放到evaluate/results_<timestamp>_<model_type>文件夹下
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        results_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "evaluate", f"results_{timestamp}_{model_type}"
+        )
+        os.makedirs(results_dir, exist_ok=True)
+        
+        # 计算结果和生成摘要
         ttf = self.time_array[-1] - self.time_array[0]
         summary = {}
         summary["Success"] = True if self.crash == 0 else False
         print("You reached the goal in %5.3f seconds" % ttf)
         summary["time_to_finish"] = ttf
+        summary["model_type"] = model_type
+        summary["timestamp"] = timestamp
+        
         print("Your intermediate times are:")
         print_distance = 10
         summary["segment_times"] = {}
         for i in range(print_distance, self.xmax + 1, print_distance):
             print("    %2i: %5.3fs " % (i, self.time_array[i] - self.time_array[0]))
             summary["segment_times"]["%i" % i] = self.time_array[i] - self.time_array[0]
+        
         print("You hit %i obstacles" % self.crash)
         summary["number_crashes"] = self.crash
+        
+        # 保存摘要到结果目录
+        summary_path = os.path.join(results_dir, "summary.yaml")
+        with open(summary_path, "w") as f:
+            if os.getenv("ROLLOUT_NAME") is not None:
+                tmp = {}
+                tmp[os.getenv("ROLLOUT_NAME")] = summary
+                yaml.safe_dump(tmp, f)
+            else:
+                yaml.safe_dump(summary, f)
+        
+        # 同时保留原始位置的摘要
         with open("summary.yaml", "w") as f:
             if os.getenv("ROLLOUT_NAME") is not None:
                 tmp = {}
@@ -258,16 +293,69 @@ class Evaluator:
         print("Here is a plot of your trajectory in the xy plane")
         pos = np.array(self.pos)
         plot(xs=pos[:, 1], ys=pos[:, 2], color=True)
+        
+        # 保存轨迹图
+        if len(pos) > 0:
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 8))
+            plt.plot(pos[:, 1], pos[:, 2])
+            plt.xlabel('X [m]')
+            plt.ylabel('Y [m]')
+            plt.title('XY Trajectory')
+            plt.grid(True)
+            plt.savefig(os.path.join(results_dir, "trajectory_xy.png"))
+            
+            # 保存3D轨迹图
+            if pos.shape[1] > 3:  # 确保有Z坐标
+                fig = plt.figure(figsize=(12, 10))
+                ax = fig.add_subplot(111, projection='3d')
+                ax.plot(pos[:, 1], pos[:, 2], pos[:, 3])
+                ax.set_xlabel('X [m]')
+                ax.set_ylabel('Y [m]')
+                ax.set_zlabel('Z [m]')
+                ax.set_title('3D Trajectory')
+                plt.savefig(os.path.join(results_dir, "trajectory_3d.png"))
 
         print("Here is a plot of your average velocity per 1m x-segment")
         x = np.arange(1, self.xmax + 1)
         dt = np.array(self.time_array)
         y = 1 / (dt[1:] - dt[0:-1])
         plot(xs=x, ys=y, color=True)
+        
+        # 保存速度图
+        plt.figure(figsize=(10, 6))
+        plt.plot(x, y)
+        plt.xlabel('Distance [m]')
+        plt.ylabel('Velocity [m/s]')
+        plt.title('Average Velocity per Segment')
+        plt.grid(True)
+        plt.savefig(os.path.join(results_dir, "velocity.png"))
 
         print("Here is a plot of the distance to the closest obstacles")
         dist = np.array(self.dist)
-        plot(xs=dist[:, 0] - self.time_array[0], ys=dist[:, 1], color=True)
+        if len(dist) > 0:
+            plot(xs=dist[:, 0] - self.time_array[0], ys=dist[:, 1], color=True)
+            
+            # 保存障碍物距离图
+            plt.figure(figsize=(10, 6))
+            plt.plot(dist[:, 0] - self.time_array[0], dist[:, 1])
+            plt.xlabel('Time [s]')
+            plt.ylabel('Distance to Obstacle [m]')
+            plt.title('Minimum Distance to Obstacles')
+            plt.grid(True)
+            plt.savefig(os.path.join(results_dir, "obstacle_distance.png"))
+        
+        # 保存原始数据供后续分析
+        if len(pos) > 0:
+            np.savetxt(os.path.join(results_dir, "trajectory.csv"), pos, delimiter=',', 
+                       header="time,x,y,z", comments='')
+        
+        if len(dist) > 0:
+            np.savetxt(os.path.join(results_dir, "obstacle_distances.csv"), dist, delimiter=',',
+                       header="time,distance", comments='')
+            
+        # 报告保存位置
+        print(f"Results saved to: {results_dir}/")
 
         rospy.signal_shutdown("Completed Evaluation")
 
