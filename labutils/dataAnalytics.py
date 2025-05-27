@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import getpass
 uname = getpass.getuser()
 
-sys.path.append(f'/home/{uname}/agile_ws/src/agile_flight/learner')
-sys.path.append(f'/home/{uname}/agile_ws/src/agile_flight/envtest/ros')
+sys.path.append(f'/home/{uname}/ws/vitfly_ws/src/vitfly/learner')
+sys.path.append(f'/home/{uname}/vitfly_ws/src/vitfly/envtest/ros')
 from learner_lstm import LearnerLSTM
 
 dataset = sys.argv[1]

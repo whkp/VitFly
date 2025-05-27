@@ -50,29 +50,35 @@ class TrajectoryAnalyzer:
             print(f"Loading data for {model_name} from {len(valid_subfolders)} subfolders")
             
             # Load and combine data from all subfolders
-            traj_metadata = []
+            all_data = []
             
             for folder in valid_subfolders:
                 csv_path = opj(folder, "data.csv")
                 try:
-                    # Read metadata (all columns except last)
-                    metadata = np.genfromtxt(csv_path, delimiter=",", dtype=np.float64)[1:, :-1]
-                    # Read collision data (last column)
-                    coll_data = np.genfromtxt(csv_path, delimiter=",", dtype=bool)[1:, -1]
-                    # Combine metadata and collision data
-                    combined_data = np.column_stack((metadata, coll_data))
-                    traj_metadata.append(combined_data)
+                    # Read CSV data using pandas
+                    df = pd.read_csv(csv_path)
+                    
+                    # Convert DataFrame to numpy array for compatibility
+                    data_array = df.values
+                    all_data.append(data_array)
+                    
                 except Exception as e:
                     print(f"Failed to read {csv_path}: {e}")
                     continue
             
-            if not traj_metadata:
+            if not all_data:
                 raise ValueError("No valid trajectory data found in any subfolder")
             
-            # Stack all trajectory data
-            self.trajectory_data = np.row_stack(traj_metadata)
+            # Concatenate all data
+            self.trajectory_data = np.concatenate(all_data, axis=0)
+            
+            # Store column names for reference
+            sample_df = pd.read_csv(opj(valid_subfolders[0], "data.csv"))
+            self.column_names = sample_df.columns.tolist()
+            
             print(f"Successfully loaded {len(self.trajectory_data)} data points for {model_name}")
             print(f"Data shape: {self.trajectory_data.shape}")
+            print(f"Columns: {self.column_names}")
             
         except Exception as e:
             print(f"Error loading data for {model_name}: {e}")
@@ -85,19 +91,33 @@ class TrajectoryAnalyzer:
             try:
                 obs_csv_path = opj(obs_folder, "static_obstacles.csv")
                 if os.path.exists(obs_csv_path):
+                    # 仿照gen_plots.py的数据加载方式：跳过第一列，从第二列开始
                     self.obs_data = np.genfromtxt(obs_csv_path, delimiter=",", dtype=np.float64)[:, 1:]
-                    print(f"Loaded {len(self.obs_data)} static obstacles")
+                    if self.obs_data.ndim == 1:
+                        self.obs_data = self.obs_data.reshape(1, -1)
+                    print(f"Loaded {len(self.obs_data)} static obstacles from {obs_csv_path}")
+                    print(f"Obstacle data shape: {self.obs_data.shape}")
+                    print(f"Sample obstacle (first 3): {self.obs_data[:min(3, len(self.obs_data))]}")
                 else:
                     print(f"No static_obstacles.csv found in {obs_folder}")
             except Exception as e:
                 print(f"Error loading obstacle data: {e}")
-                
+                self.obs_data = None
+        
         # Initialize statistics storage
         self.traj_stats = None
         
     def is_valid(self):
         """Check if the analyzer has valid data."""
         return self.trajectory_data is not None
+    
+    def get_column_index(self, column_name):
+        """Get the index of a column by name."""
+        try:
+            return self.column_names.index(column_name)
+        except ValueError:
+            print(f"Column '{column_name}' not found in data")
+            return None
     
     def analyze_collisions(self):
         """
@@ -109,12 +129,14 @@ class TrajectoryAnalyzer:
         if not self.is_valid():
             return {"error": "No valid data"}
         
-        # Assume last column contains collision information (boolean)
-        collision_column = -1
-        
         try:
-            # Convert collision data to boolean if needed
-            collision_data = self.trajectory_data[:, collision_column].astype(bool)
+            # Get collision column index
+            collision_col_idx = self.get_column_index('is_collide')
+            if collision_col_idx is None:
+                return {"error": "No collision column found"}
+            
+            # Extract collision data
+            collision_data = self.trajectory_data[:, collision_col_idx].astype(bool)
             
             # Count total collision timesteps
             total_collision_timesteps = np.sum(collision_data)
@@ -123,22 +145,22 @@ class TrajectoryAnalyzer:
             collision_events = 0
             in_collision = False
             collision_durations = []
-            start_time = 0
-            
-            # Assuming time is in column 1 (adjust based on your data structure)
-            time_column = 1 if self.trajectory_data.shape[1] > 1 else 0
+            start_idx = 0
             
             for i in range(len(collision_data)):
                 if collision_data[i] and not in_collision:
                     # Start of a new collision
                     in_collision = True
                     collision_events += 1
-                    start_time = self.trajectory_data[i, time_column] if time_column < self.trajectory_data.shape[1] else i
+                    start_idx = i
                 elif not collision_data[i] and in_collision:
                     # End of collision
                     in_collision = False
-                    end_time = self.trajectory_data[i-1, time_column] if time_column < self.trajectory_data.shape[1] else i-1
-                    collision_durations.append(end_time - start_time)
+                    collision_durations.append(i - start_idx)
+            
+            # Handle case where collision continues to end
+            if in_collision:
+                collision_durations.append(len(collision_data) - start_idx)
             
             # Calculate statistics
             collision_rate = total_collision_timesteps / len(collision_data) if len(collision_data) > 0 else 0
@@ -171,42 +193,50 @@ class TrajectoryAnalyzer:
             return None
             
         try:
-            # Assume columns are organized as: [index, time, ..., x, y, z, ...]
-            # You may need to adjust these column indices based on your actual data structure
-            if self.trajectory_data.shape[1] >= 10:
-                x_col, y_col, z_col = 7, 8, 9  # Original column indices
-            elif self.trajectory_data.shape[1] >= 5:
-                x_col, y_col, z_col = 2, 3, 4  # Adjusted for smaller datasets
-            else:
-                print(f"Warning: Not enough columns in data for {self.model_name}")
+            # Get column indices
+            x_col_idx = self.get_column_index('pos_x')
+            y_col_idx = self.get_column_index('pos_y')
+            z_col_idx = self.get_column_index('pos_z')
+            
+            if None in [x_col_idx, y_col_idx, z_col_idx]:
+                print(f"Warning: Position columns not found for {self.model_name}")
                 return None
             
-            # Create bins for x-axis - using linspace similar to gen_plots.py
-            x_data = self.trajectory_data[:, x_col]
-            x_bins_edges = np.linspace(0, 59, x_bins)
+            # Extract position data
+            x_data = self.trajectory_data[:, x_col_idx]
+            y_data = self.trajectory_data[:, y_col_idx]
+            z_data = self.trajectory_data[:, z_col_idx]
+            
+            # Create bins for x-axis
+            x_min, x_max = np.min(x_data), np.max(x_data)
+            x_bins_edges = np.linspace(x_min, x_max, x_bins + 1)
             
             # Digitize x-coordinates to find which bin each point belongs to
             x_digitized = np.digitize(x_data, x_bins_edges)
             
             # Initialize statistics array
-            traj_stats = np.zeros((len(x_bins_edges), 4))  # [mean_y, mean_z, std_y, std_z]
+            traj_stats = np.zeros((x_bins, 4))  # [mean_y, mean_z, std_y, std_z]
             
             # Calculate statistics for each bin
-            for i in range(len(x_bins_edges)):
+            for i in range(1, x_bins + 1):  # digitize returns 1-based indices
                 bin_indices = np.where(x_digitized == i)[0]
                 
                 if len(bin_indices) > 0:
-                    y_data = self.trajectory_data[bin_indices, y_col]
-                    z_data = self.trajectory_data[bin_indices, z_col]
+                    y_bin_data = y_data[bin_indices]
+                    z_bin_data = z_data[bin_indices]
                     
-                    traj_stats[i, 0] = np.mean(y_data)  # mean_y
-                    traj_stats[i, 1] = np.mean(z_data)  # mean_z
-                    traj_stats[i, 2] = np.std(y_data)   # std_y
-                    traj_stats[i, 3] = np.std(z_data)   # std_z
+                    traj_stats[i-1, 0] = np.mean(y_bin_data)  # mean_y
+                    traj_stats[i-1, 1] = np.mean(z_bin_data)  # mean_z
+                    traj_stats[i-1, 2] = np.std(y_bin_data)   # std_y
+                    traj_stats[i-1, 3] = np.std(z_bin_data)   # std_z
             
             # Remove bins with no data (all zeros)
             valid_bins = ~np.all(traj_stats == 0, axis=1)
-            traj_stats = traj_stats[valid_bins]
+            if np.any(valid_bins):
+                traj_stats = traj_stats[valid_bins]
+                self.x_bins_centers = (x_bins_edges[:-1] + x_bins_edges[1:])[valid_bins] / 2
+            else:
+                self.x_bins_centers = np.linspace(x_min, x_max, x_bins)
             
             self.traj_stats = traj_stats
             return traj_stats
@@ -215,22 +245,33 @@ class TrajectoryAnalyzer:
             print(f"Error computing trajectory statistics for {self.model_name}: {e}")
             return None
     
-    def plot_sphere(self, ax, pos, radius, alpha=0.2):
+    def plot_sphere(self, ax, pos, radius, alpha=0.3, color='red', proj=True):
         """
-        Plot a sphere representing a static obstacle.
+        Plot a sphere representing a static obstacle (仿照gen_plots.py的风格).
         
         Args:
             ax: Matplotlib 3D axis object
             pos: Position [x, y, z] of the sphere center
             radius: Radius of the sphere
             alpha: Transparency of the sphere
+            color: Color of the sphere
+            proj: Whether to show projections on coordinate planes
         """
+        # 使用与gen_plots.py相同的网格分辨率
         u, v = np.mgrid[0:2*np.pi:50j, 0:np.pi:50j]
-        x = radius * np.cos(u) * np.sin(v) + pos[0]
-        y = (radius/5) * np.sin(u) * np.sin(v) + pos[1]
-        z = (radius/10) * np.cos(v) + pos[2]
         
+        # 生成球体坐标，仿照gen_plots.py的缩放方式
+        x = radius * np.cos(u) * np.sin(v) + pos[0]
+        y = (radius/5) * np.sin(u) * np.sin(v) + pos[1]  # Y轴压缩
+        z = (radius/10) * np.cos(v) + pos[2]  # Z轴压缩
+        
+        # 绘制球体表面，使用黑色（与gen_plots.py一致）
         ax.plot_surface(x, y, z, color='k', alpha=alpha)
+        
+        # 如果需要投影，在坐标平面上显示轮廓
+        if proj:
+            ax.contourf(x, y, z, zdir="z", offset=0, colors='r', alpha=0.3)
+            ax.contourf(x, y, z, zdir="y", offset=-5, colors='r', alpha=0.3)
     
     def plot_2d_trajectory(self, ax, plane='xy', color='blue', alpha=0.7):
         """
@@ -249,8 +290,8 @@ class TrajectoryAnalyzer:
             print(f"Cannot plot 2D trajectory for {self.model_name}: No valid statistics")
             return
         
-        # Create x-axis based on trajectory length
-        x_axis = np.linspace(0, 59, len(self.traj_stats))
+        # Use x-axis centers computed during statistics calculation
+        x_axis = getattr(self, 'x_bins_centers', np.arange(len(self.traj_stats)))
         
         if plane == 'xy':
             mean_data = self.traj_stats[:, 0]  # mean_y
@@ -276,7 +317,7 @@ class TrajectoryAnalyzer:
     
     def plot_3d_trajectory(self, ax, color='blue', with_obstacles=True):
         """
-        Plot 3D trajectory with optional static obstacles.
+        Plot 3D trajectory with optional static obstacles (仿照gen_plots.py的风格).
         
         Args:
             ax: Matplotlib 3D axis object
@@ -290,28 +331,47 @@ class TrajectoryAnalyzer:
             print(f"Cannot plot 3D trajectory for {self.model_name}: No valid statistics")
             return
         
-        # Create coordinate arrays
-        x_axis = np.linspace(0, 59, len(self.traj_stats))
+        # Create coordinate arrays (仿照gen_plots.py的方式)
+        x_axis = np.linspace(0, 59, self.traj_stats.shape[0])
         y_axis = self.traj_stats[:, 0]  # mean_y
         z_axis = self.traj_stats[:, 1]  # mean_z
         
         # Plot 3D trajectory
         ax.plot(x_axis, y_axis, z_axis, color=color, label=self.model_name, linewidth=2)
         
-        # Plot obstacles if available and requested
+        # Plot obstacles if available and requested (仿照gen_plots.py的逻辑)
         if with_obstacles and self.obs_data is not None:
-            for i in range(len(self.traj_stats)):
-                if i % 5 == 0:  # Plot obstacles every 5 points to avoid clutter
+            print(f"Drawing obstacles for {self.model_name} - {len(self.obs_data)} obstacles available")
+            obstacles_drawn = 0
+            
+            for i in range(len(self.traj_stats)-1):
+                if i % 5 == 0:  # 每5个点绘制一次障碍物，避免过于密集
+                    # 使用与gen_plots.py完全相同的方式构建当前位置
                     curr_xyz = np.insert(self.traj_stats[i, 0:2], 0, i)
                     
-                    # Get the indices of two closest obstacles to the current position
+                    # 调试信息：检查轨迹点和障碍物位置
+                    if i == 0:  # 只在第一个点打印调试信息，避免信息过多
+                        print(f"  Current trajectory point: {curr_xyz}")
+                        print(f"  Sample obstacles: {self.obs_data[:3, :3] if len(self.obs_data) >= 3 else self.obs_data[:, :3]}")
+                    
+                    # 获取距离当前位置最近的两个障碍物的索引
                     distances = np.linalg.norm(curr_xyz - self.obs_data[:, 0:3], axis=1)
                     closest_obs_indices = np.argpartition(distances, min(2, len(self.obs_data)-1))[:2]
                     
                     for k in range(len(closest_obs_indices)):
-                        obs_pos = self.obs_data[closest_obs_indices[k], 0:3]
-                        obs_radius = self.obs_data[closest_obs_indices[k], -1]
-                        self.plot_sphere(ax, obs_pos, obs_radius, alpha=0.2)
+                        obs_idx = closest_obs_indices[k]
+                        obs_pos = self.obs_data[obs_idx, 0:3]
+                        obs_radius = self.obs_data[obs_idx, -1]
+                        
+                        # 调试信息：检查障碍物参数
+                        if obstacles_drawn < 3:  # 只打印前3个障碍物的信息
+                            print(f"  Drawing obstacle {obstacles_drawn+1}: pos={obs_pos}, radius={obs_radius}")
+                        
+                        # 使用与gen_plots.py相同的参数：proj=False, alpha=0.2
+                        self.plot_sphere(ax, obs_pos, obs_radius, proj=False, alpha=0.2)
+                        obstacles_drawn += 1
+            
+            print(f"  Total obstacles drawn for {self.model_name}: {obstacles_drawn}")
 
 
 def analyze_all_models(data_directory, obs_folder=None):
@@ -323,13 +383,13 @@ def analyze_all_models(data_directory, obs_folder=None):
         obs_folder (str): Path to the folder containing static_obstacles.csv (optional)
     """
     
-    # Define model configurations
+    # Define model configurations based on actual folder names in data directory
     model_configs = {
         'expert': {'color': 'saddlebrown', 'name': 'Expert'},
         'vit': {'color': 'gray', 'name': 'ViT'},
-        'lstm': {'color': 'red', 'name': 'LSTM'},
         'vitlstm': {'color': 'green', 'name': 'ViT+LSTM'},
-        'convnet': {'color': 'steelblue', 'name': 'ConvNet'}
+        'convnet': {'color': 'steelblue', 'name': 'ConvNet'},
+        'robustVitLstm': {'color': 'red', 'name': 'RobustViT+LSTM'}
     }
     
     # Initialize analyzers for each model
@@ -362,7 +422,7 @@ def analyze_all_models(data_directory, obs_folder=None):
     os.makedirs(output_dir, exist_ok=True)
     
     # Set up plotting style
-    plt.style.use('seaborn-v0_8')
+    plt.style.use('default')
     plt.rcParams.update({'font.size': 12, 'figure.dpi': 100})
     
     # 1. Collision Analysis Bar Chart
@@ -457,58 +517,59 @@ def create_collision_analysis_plot(collision_stats, model_configs, output_dir):
 def create_2d_trajectory_plots(analyzers, model_configs, output_dir):
     """Create 2D trajectory projection plots."""
     
-    # Create XY plane plot
+    # XY Plane Plot
     fig, ax = plt.subplots(figsize=(12, 8))
     
     for model_folder, analyzer in analyzers.items():
-        color = model_configs[model_folder]['color']
-        analyzer.plot_2d_trajectory(ax, plane='xy', color=color)
+        if analyzer.is_valid():
+            config = model_configs[model_folder]
+            analyzer.plot_2d_trajectory(ax, plane='xy', color=config['color'], alpha=0.3)
     
-    ax.set_title('Trajectory Variation in XY Plane', fontsize=14, fontweight='bold')
-    ax.legend()
+    ax.set_title('Trajectory Variations in XY Plane', fontsize=16, fontweight='bold')
+    ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
     plt.tight_layout()
-    plt.savefig(opj(output_dir, 'trajectory_2d_xy.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(opj(output_dir, 'trajectory_2d_xy.pdf'), bbox_inches='tight')
+    plt.savefig(opj(output_dir, 'trajectory_xy_plane.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(opj(output_dir, 'trajectory_xy_plane.pdf'), bbox_inches='tight')
     plt.close()
     
-    # Create XZ plane plot
+    # XZ Plane Plot
     fig, ax = plt.subplots(figsize=(12, 8))
     
     for model_folder, analyzer in analyzers.items():
-        color = model_configs[model_folder]['color']
-        analyzer.plot_2d_trajectory(ax, plane='xz', color=color)
+        if analyzer.is_valid():
+            config = model_configs[model_folder]
+            analyzer.plot_2d_trajectory(ax, plane='xz', color=config['color'], alpha=0.3)
     
-    ax.set_title('Trajectory Variation in XZ Plane', fontsize=14, fontweight='bold')
-    ax.legend()
+    ax.set_title('Trajectory Variations in XZ Plane', fontsize=16, fontweight='bold')
+    ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
     plt.tight_layout()
-    plt.savefig(opj(output_dir, 'trajectory_2d_xz.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(opj(output_dir, 'trajectory_2d_xz.pdf'), bbox_inches='tight')
+    plt.savefig(opj(output_dir, 'trajectory_xz_plane.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(opj(output_dir, 'trajectory_xz_plane.pdf'), bbox_inches='tight')
     plt.close()
 
 
 def create_3d_trajectory_plot(analyzers, model_configs, output_dir):
     """Create 3D trajectory visualization with obstacles."""
     
-    fig = plt.figure(figsize=(14, 10))
+    fig = plt.figure(figsize=(15, 10))
     ax = fig.add_subplot(111, projection='3d')
     
     for model_folder, analyzer in analyzers.items():
-        color = model_configs[model_folder]['color']
-        analyzer.plot_3d_trajectory(ax, color=color, with_obstacles=True)
+        if analyzer.is_valid():
+            config = model_configs[model_folder]
+            analyzer.plot_3d_trajectory(ax, color=config['color'], with_obstacles=True)
     
-    ax.set_xlabel('x-axis (m)')
-    ax.set_ylabel('y-axis (m)')
-    ax.set_zlabel('z-axis (m)')
-    ax.set_title('3D Trajectory Comparison with Static Obstacles', fontsize=14, fontweight='bold')
-    ax.legend()
-    
-    # Set viewing angle for better visualization
-    ax.view_init(elev=20, azim=-60)
-    
-    # Set axis limits similar to gen_plots.py
     ax.set_xlim([0, 60])
     ax.set_ylim([-5, 5])
     ax.set_zlim([0, 5])
+    ax.set_xlabel('X-axis (m)', fontsize=12)
+    ax.set_ylabel('Y-axis (m)', fontsize=12)
+    ax.set_zlabel('Z-axis (m)', fontsize=12)
+    ax.set_title('3D Trajectory Comparison with Obstacles', fontsize=16, fontweight='bold')
+    ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
+    
+    # Set viewing angle
+    ax.view_init(elev=20, azim=-60)
     
     plt.tight_layout()
     plt.savefig(opj(output_dir, 'trajectory_3d.png'), dpi=300, bbox_inches='tight')

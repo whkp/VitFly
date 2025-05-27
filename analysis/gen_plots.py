@@ -186,25 +186,24 @@ if __name__ == "__main__":
     
     vit_folder = "./data/vit/"
     expert_folder = "./data/expert/"
-    lstm_folder = "./data/lstm/"
+    rob_vitlstm_folder = "./data/roboustVitLstm/"
     vit_lstm_folder = "./data/vitlstm/"
     #unet_folder = "./data/unet_modified_md/"
     conv_folder = "./data/convnet/"
     
     obstacle_folder = "/home/hkp/ws/vitfly_ws/src/vitfly/flightmare/flightpy/configs/vision/spheres_medium/environment_50/"
 
-    obstacle_folder = "/home/hkp/Downloads/Softwares/build/catkin_ws/src/agile_flight/flightmare/flightpy/configs/vision/medium/environment_30/"
 
     vit_traj_folders = sorted(glob.glob(opj(vit_folder, "*")))
     expert_traj_folders = sorted(glob.glob(opj(expert_folder, "*")))
-    lstm_traj_folders = sorted(glob.glob(opj(lstm_folder, "*")))
+    rob_vitlstm_traj_folders = sorted(glob.glob(opj(rob_vitlstm_folder, "*")))
     vit_lstm_traj_folders = sorted(glob.glob(opj(vit_lstm_folder, "*")))
     conv_traj_folders = sorted(glob.glob(opj(conv_folder, "*")))
     #unet_traj_folders = sorted(glob.glob(opj(unet_folder, "*")))
 
     vit_data = gen_plot_data(vit_folder, obstacle_folder)
     expert_data = gen_plot_data(expert_folder, obstacle_folder)
-    lstm_data = gen_plot_data(lstm_folder, obstacle_folder)
+    rob_vitlstm_data = gen_plot_data(rob_vitlstm_folder, obstacle_folder)
     vitlstm_data = gen_plot_data(vit_lstm_folder, obstacle_folder)
     conv_data = gen_plot_data(conv_folder, obstacle_folder)
     #unet_data = gen_plot_data(unet_traj_folders, obstacle_folder)
@@ -212,115 +211,6 @@ if __name__ == "__main__":
     #ele, azim = 22, -49
     ele, azim = 32, -48
 
-    #### PLOT ALL DATA (2D projections and 3D) IN ONE PLOT ######
-    #### UNCOMMENT IF YOU WANT TO USE IT! ######################
-
-    #plt.rcParams.update({'font.size': 50, 'font.family': 'serif'})
-
-    # plt.rc('xtick', labelsize=50)
-    # plt.rc('ytick', labelsize=50)
-    # plt.rc('axes', labelsize=50)
-    # plt.rc('axes', titlesize=150)
-    # plt.rc('legend', fontsize=100)
-
-    # fig = plt.figure(2)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # #ax.view_init(elev=22, azim=-49)
-    # ax.view_init(elev=ele, azim=azim)
-
-    # vit_data.plot_2d3d_traj()
-    
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # #ax.set_aspect('auto', adjustable='box')
-    # #ax.axis("equal")
-    # #ax.set_box_aspect([1.0, 1.0, 1.0])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("ViT Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/vit/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/vit/traj_2d_3d.png", dpi=900)
-
-    # fig = plt.figure(3)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # ax.view_init(elev=ele, azim=azim)
-    # expert_data.plot_2d3d_traj()
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("Expert Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/expert/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/expert/traj_2d_3d.png", dpi=900)
-
-    # fig = plt.figure(4)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # ax.view_init(elev=ele, azim=azim)
-    # lstm_data.plot_2d3d_traj()
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("LSTMNet (5L) Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/lstm/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/lstm/traj_2d_3d.png", dpi=900)
-
-    # fig = plt.figure(5)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # ax.view_init(elev=ele, azim=azim)
-    # vitlstm_data.plot_2d3d_traj()
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("ViT + LSTM (3L) Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/vitlstm/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/vitlstm/traj_2d_3d.png", dpi=900)
-
-    # fig = plt.figure(6)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # ax.view_init(elev=ele, azim=azim)
-    # unet_data.plot_2d3d_traj()
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("UNet + LSTM (2L) Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/unet/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/unet/traj_2d_3d.png", dpi=900)
-
-    # fig = plt.figure(7)
-    # fig.tight_layout()
-    # ax = plt.axes(projection='3d')
-    # ax.view_init(elev=ele, azim=azim)
-    # conv_data.plot_2d3d_traj()
-    # ax.set_xlim([0, 60])
-    # ax.set_ylim([-5, 5])
-    # ax.set_zlim([0, 5])
-    # ax.set_xlabel("x-axis (m)")
-    # ax.set_ylabel("y-axis (m)")
-    # ax.set_zlabel("z-axis (m)")
-    # ax.set_title("ConvNet Trajectory Statistics")
-    # plt.savefig("./plots_modified_md/convnet/traj_2d_3d.pdf")
-    # plt.savefig("./plots_modified_md/convnet/traj_2d_3d.png", dpi=900)
-
-
-    #fig = plt.figure(8)
 
     fig = plt.figure(num=8, figsize=(35/2, 25/2))
 
@@ -339,7 +229,7 @@ if __name__ == "__main__":
     ax.minorticks_on()
     
     vitlstm_data.plot_2d_xy_traj(color="g")
-    lstm_data.plot_2d_xy_traj(color="r")
+    rob_vitlstm_data.plot_2d_xy_traj(color="r")
     vit_data.plot_2d_xy_traj(color="gray")
     expert_data.plot_2d_xy_traj(color="saddlebrown")
     #unet_data.plot_2d_xy_traj(color="darkgoldenrod")
@@ -348,7 +238,7 @@ if __name__ == "__main__":
     ax.set_xlabel("x-axis (m)", labelpad=-3.0)
     ax.set_ylabel("y-axis (m)")
     ax.set_title("Variation of trajectory on the x-y plane")
-    plt.legend(["ViT+LSTM", "LSTMnet", "ViT", "Expert", "Unet", "Convnet"], loc="best", fancybox=True)
+    plt.legend(["ViT+LSTM", "Robust ViT+LSTM", "ViT", "Expert", "Convnet"], loc="best", fancybox=True)
     plt.savefig("./plots_modified_md/traj_2d_xy.pdf")
     plt.savefig("./plots_modified_md/traj_2d_xy.png", dpi=900)
 
@@ -371,7 +261,7 @@ if __name__ == "__main__":
     ax.minorticks_on()
 
     vitlstm_data.plot_2d_xz_traj(color="g")
-    lstm_data.plot_2d_xz_traj(color="r")
+    rob_vitlstm_data.plot_2d_xz_traj(color="r")
     vit_data.plot_2d_xz_traj(color="gray")
     expert_data.plot_2d_xz_traj(color="saddlebrown")
     #unet_data.plot_2d_xz_traj(color="darkgoldenrod")
@@ -380,7 +270,7 @@ if __name__ == "__main__":
     ax.set_xlabel("x-axis (m)", labelpad=-3.0)
     ax.set_ylabel("z-axis (m)")
     ax.set_title("Variation of trajectory on the x-z plane")
-    plt.legend(["ViT+LSTM", "LSTMnet", "ViT", "Expert", "Unet", "Convnet"], loc="best", fancybox=True)
+    plt.legend(["ViT+LSTM", "Robust ViT+LSTM", "ViT", "Expert", "Convnet"], loc="best", fancybox=True)
     plt.savefig("./plots_modified_md/traj_2d_xz.pdf")
     plt.savefig("./plots_modified_md/traj_2d_xz.png", dpi=900)
 
@@ -401,7 +291,7 @@ if __name__ == "__main__":
     ax.view_init(elev=ele, azim=azim)
 
     vitlstm_data.plot_3d_traj(color="g")
-    lstm_data.plot_3d_traj(color="r")
+    rob_vitlstm_data.plot_3d_traj(color="r")
     vit_data.plot_3d_traj(color="gray")
     expert_data.plot_3d_traj(color="saddlebrown")
     #unet_data.plot_3d_traj(color="darkgoldenrod")
@@ -414,7 +304,7 @@ if __name__ == "__main__":
     ax.set_ylabel("y-axis (m)", labelpad=10.0)
     ax.set_zlabel("z-axis (m)", labelpad=10.0)
     ax.set_title("Trajectories with obstacles")
-    plt.legend(["ViT+LSTM", "LSTMnet", "ViT", "Expert", "Convnet"], loc="best", fancybox=True)
+    plt.legend(["ViT+LSTM", "Robust ViT+LSTM", "ViT", "Expert", "Convnet"], loc="best", fancybox=True)
     plt.savefig("./plots_modified_md/traj_3d.pdf")
     plt.savefig("./plots_modified_md/traj_3d.png", dpi=900)
 

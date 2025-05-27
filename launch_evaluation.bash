@@ -118,7 +118,8 @@ do
   #--model_type "ConvNet" --model_path ../../models/ConvNet_model.pth &
   #--model_type "ViT" --model_path ../../models/ViT_model.pth &
   #--model_type "LSTMNet" --model_path ../../models/LSTMnet_model.pth&
-  python3 run_competition.py $run_competition_args --desVel 5.0 --model_type "SpatialAttentionViT" --model_path ../../models/SpatialAttentionViT.pth &
+  #--model_type "SpatialAttentionViT" --model_path ../../models/SpatialAttentionViT.pth &
+  python3 run_competition.py $run_competition_args --desVel 7.0 --model_type "RobustViTLSTM" --model_path ../../models/RobustViTLSTM.pth &
   COMP_PID="$!"
 
   cd -

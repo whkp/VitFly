@@ -6,8 +6,6 @@ import glob
 from os.path import join as opj
 import seaborn as sns
 from mpl_toolkits.mplot3d.axes3d import Axes3D
-from matplotlib.patches import Rectangle
-import matplotlib.patches as mpatches
 import json
 
 class ModelConfig:
@@ -18,515 +16,418 @@ class ModelConfig:
         self.color = color
         self.marker = marker
         self.linestyle = linestyle
-        self.folder_name = folder_name or name.lower().replace('+', '').replace(' ', '')
+        self.folder_name = folder_name or name.lower().replace('robust', '').replace('+', '').replace(' ', '')
 
-class VisionTransformerAnalyzer:
+class TrajectoryDataLoader:
     """
-    Analyzer for Vision Transformer quadrotor obstacle avoidance data.
-    Generates plots matching the paper's visualizations.
+    Load and preprocess trajectory data from CSV files for different models.
     """
     
-    def __init__(self, data_folder, model_config, speed_folders=None):
+    def __init__(self, data_folder, model_config):
         """
-        Initialize the analyzer with data from a specific model.
+        Initialize the data loader for a specific model.
         
         Args:
             data_folder (str): Path to the folder containing numbered subfolders with data.csv files
             model_config (ModelConfig): Configuration object for the model
-            speed_folders (dict): Mapping of speeds to folder names (optional, not used in new structure)
         """
         self.model_config = model_config
         self.model_name = model_config.name
         self.data_folder = data_folder
-        self.trajectory_data = {}
-        self.collision_data = {}
+        self.trajectory_data = []
+        self.collision_data = []
         
-        # Load data for each speed
-        speeds = [3, 4, 5, 6, 7]
-        for speed in speeds:
-            self.load_speed_data(speed, None)
+        self._load_data()
     
-    def load_speed_data(self, speed, folder_name):
-        """Load trajectory data for a specific speed."""
-        # For the new data structure, look for numbered subfolders directly under model folder
-        model_subfolders = sorted(glob.glob(opj(self.data_folder, "[0-9]*")))
+    def _load_data(self):
+        """Load trajectory data from all subfolders."""
+        # Get all numbered subfolders
+        subfolders = sorted([d for d in os.listdir(self.data_folder) 
+                           if os.path.isdir(opj(self.data_folder, d)) and d.isdigit()])
         
-        if not model_subfolders:
+        if not subfolders:
             print(f"No numbered subfolders found in {self.data_folder}")
             return
         
-        trajectories = []
-        collisions = []
+        print(f"Loading data for {self.model_name} from {len(subfolders)} subfolders")
         
-        for subfolder in model_subfolders:
-            csv_path = opj(subfolder, "data.csv")
+        for subfolder in subfolders:
+            csv_path = opj(self.data_folder, subfolder, "data.csv")
             if os.path.exists(csv_path):
                 try:
-                    # Read the CSV file
-                    data = pd.read_csv(csv_path)
+                    # Read CSV data
+                    df = pd.read_csv(csv_path)
                     
-                    # Filter data by desired velocity (speed)
-                    # Assuming desired_vel column contains the target speed
-                    speed_tolerance = 0.5  # Allow some tolerance in speed matching
-                    speed_data = data[np.abs(data['desired_vel'] - speed) < speed_tolerance]
+                    # Store the dataframe for this trial
+                    self.trajectory_data.append(df)
                     
-                    if len(speed_data) > 0:
-                        # Extract relevant columns based on the CSV structure
-                        trajectory = speed_data[[
-                            'timestamp', 'desired_vel',
-                            'quat_1', 'quat_2', 'quat_3', 'quat_4',
-                            'pos_x', 'pos_y', 'pos_z',
-                            'vel_x', 'vel_y', 'vel_z',
-                            'velcmd_x', 'velcmd_y', 'velcmd_z',
-                            'ct_cmd', 'br_cmd_x', 'br_cmd_y', 'br_cmd_z'
-                        ]].values
-                        
-                        collision = speed_data['is_collide'].values.astype(bool)
-                        
-                        trajectories.append(trajectory)
-                        collisions.append(collision)
+                    # Extract collision information if available
+                    if 'is_collide' in df.columns:
+                        self.collision_data.append(df['is_collide'].values)
+                    else:
+                        # If no collision column, assume no collisions
+                        self.collision_data.append(np.zeros(len(df), dtype=bool))
                 
                 except Exception as e:
                     print(f"Error loading {csv_path}: {e}")
                     continue
         
-        if trajectories:
-            self.trajectory_data[speed] = trajectories
-            self.collision_data[speed] = collisions
-            print(f"Loaded {len(trajectories)} trials for {self.model_name} at {speed} m/s")
+        print(f"Successfully loaded {len(self.trajectory_data)} trials for {self.model_name}")
 
-
-class ModelRegistry:
-    """Registry for managing model configurations."""
-    
-    def __init__(self):
-        self.models = {}
-        self._initialize_default_models()
-    
-    def _initialize_default_models(self):
-        """Initialize default models from the paper."""
-        self.add_model('expert', ModelConfig('Expert', 'red', 'x', '--'))
-        self.add_model('vit', ModelConfig('ViT', 'gray', 's', '-'))
-        self.add_model('vitlstm', ModelConfig('ViT+LSTM', 'green', 'o', '-'))
-        self.add_model('convnet', ModelConfig('ConvNet', 'blue', '^', '-'))
-        self.add_model('lstmnet', ModelConfig('LSTMnet', 'orange', 'v', '-'))
-    
-    def add_model(self, key, config):
-        """Add a new model configuration."""
-        self.models[key] = config
-    
-    def remove_model(self, key):
-        """Remove a model configuration."""
-        if key in self.models:
-            del self.models[key]
-    
-    def get_model(self, key):
-        """Get a model configuration."""
-        return self.models.get(key)
-    
-    def get_all_models(self):
-        """Get all model configurations."""
-        return self.models
-    
-    def save_to_file(self, filepath):
-        """Save model configurations to a JSON file."""
-        config_dict = {}
-        for key, config in self.models.items():
-            config_dict[key] = {
-                'name': config.name,
-                'color': config.color,
-                'marker': config.marker,
-                'linestyle': config.linestyle,
-                'folder_name': config.folder_name
-            }
+    def get_collision_statistics(self):
+        """Calculate collision statistics across all trials."""
+        if not self.collision_data:
+            return {}
         
-        with open(filepath, 'w') as f:
-            json.dump(config_dict, f, indent=2)
-    
-    def load_from_file(self, filepath):
-        """Load model configurations from a JSON file."""
-        with open(filepath, 'r') as f:
-            config_dict = json.load(f)
+        total_trials = len(self.collision_data)
+        trials_with_collisions = sum(1 for collision_array in self.collision_data 
+                                   if np.any(collision_array))
+        collision_rate = trials_with_collisions / total_trials if total_trials > 0 else 0
         
-        self.models = {}
-        for key, config_data in config_dict.items():
-            self.models[key] = ModelConfig(**config_data)
+        # Total collision timesteps across all trials
+        total_collision_timesteps = sum(np.sum(collision_array) for collision_array in self.collision_data)
+        total_timesteps = sum(len(collision_array) for collision_array in self.collision_data)
+        timestep_collision_rate = total_collision_timesteps / total_timesteps if total_timesteps > 0 else 0
+        
+        return {
+            'total_trials': total_trials,
+            'trials_with_collisions': trials_with_collisions,
+            'trial_collision_rate': collision_rate,
+            'timestep_collision_rate': timestep_collision_rate,
+            'success_rate': 1 - collision_rate
+        }
+
+    def get_position_statistics(self, speed_filter=None):
+        """
+        Get position statistics for trajectory analysis.
+        
+        Args:
+            speed_filter (float): Filter trials by desired velocity (optional)
+        """
+        if not self.trajectory_data:
+            return None
+        
+        all_positions = []
+        
+        for df in self.trajectory_data:
+            # Filter by speed if specified
+            if speed_filter is not None and 'desired_vel' in df.columns:
+                speed_data = df[np.abs(df['desired_vel'] - speed_filter) < 0.5]
+                if len(speed_data) == 0:
+                    continue
+                df = speed_data
+            
+            # Extract position data
+            if all(['pos_x' in df.columns, 'pos_y' in df.columns, 'pos_z' in df.columns]):
+                positions = df[['pos_x', 'pos_y', 'pos_z']].values
+                all_positions.append(positions)
+        
+        if not all_positions:
+            return None
+        
+        # Concatenate all position data
+        all_pos = np.concatenate(all_positions, axis=0)
+        
+        return {
+            'positions': all_pos,
+            'mean_x': np.mean(all_pos[:, 0]),
+            'mean_y': np.mean(all_pos[:, 1]),
+            'mean_z': np.mean(all_pos[:, 2]),
+            'std_x': np.std(all_pos[:, 0]),
+            'std_y': np.std(all_pos[:, 1]),
+            'std_z': np.std(all_pos[:, 2])
+        }
 
 
-class PlotGenerator:
-    """Class responsible for generating all plots."""
+class ComparisonPlotter:
+    """Class for creating comparison plots between different models."""
     
-    def __init__(self, analyzers, model_registry, output_dir):
-        self.analyzers = analyzers
-        self.model_registry = model_registry
+    def __init__(self, data_loaders, output_dir):
+        """
+        Initialize the plotter with data loaders for different models.
+        
+        Args:
+            data_loaders (dict): Dictionary of model_name -> TrajectoryDataLoader
+            output_dir (str): Directory to save plots
+        """
+        self.data_loaders = data_loaders
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
     
-    def create_collision_rate_plots(self, environment='spheres'):
-        """Create collision rate plots similar to Figure 4a and 4b in the paper."""
-        speeds = [3, 4, 5, 6, 7]
+    def create_collision_comparison(self):
+        """Create collision rate comparison plot."""
+        model_names = []
+        trial_collision_rates = []
+        timestep_collision_rates = []
+        success_rates = []
+        colors = []
         
-        # Calculate collision rates for each model and speed
-        collision_rates = {}
+        for model_name, loader in self.data_loaders.items():
+            stats = loader.get_collision_statistics()
+            if stats:
+                model_names.append(loader.model_config.name)
+                trial_collision_rates.append(stats['trial_collision_rate'] * 100)
+                timestep_collision_rates.append(stats['timestep_collision_rate'] * 100)
+                success_rates.append(stats['success_rate'] * 100)
+                colors.append(loader.model_config.color)
         
-        for model_name, analyzer in self.analyzers.items():
-            rates = []
-            for speed in speeds:
-                if speed in analyzer.collision_data:
-                    # Calculate collision rate per trial
-                    total_collisions = 0
-                    total_trials = len(analyzer.collision_data[speed])
-                    
-                    for collision_array in analyzer.collision_data[speed]:
-                        if np.any(collision_array):  # If any collision occurred in this trial
-                            total_collisions += 1
-                    
-                    rate = total_collisions / total_trials if total_trials > 0 else 0
-                    rates.append(rate)
-                else:
-                    rates.append(0)
-            
-            collision_rates[model_name] = rates
+        if not model_names:
+            print("No collision data available for comparison")
+            return
         
-        # Create the plot
-        plt.figure(figsize=(8, 6))
+        # Create subplot figure
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
         
-        # Plot each model
-        for model_name, rates in collision_rates.items():
-            analyzer = self.analyzers[model_name]
-            config = analyzer.model_config
-            
-            plt.plot(speeds, rates, 
-                    color=config.color, 
-                    marker=config.marker, 
-                    linestyle=config.linestyle,
-                    markersize=8, 
-                    linewidth=2, 
-                    label=config.name)
+        # Trial-based collision rates
+        bars1 = ax1.bar(model_names, trial_collision_rates, color=colors, alpha=0.7)
+        ax1.set_ylabel('Trial Collision Rate (%)')
+        ax1.set_title('Collision Rate by Trial')
+        ax1.tick_params(axis='x', rotation=45)
         
-        plt.xlabel('Forward velocity (m/s)', fontsize=12)
-        plt.ylabel('Collision rate per trial', fontsize=12)
+        # Add value labels
+        for bar, value in zip(bars1, trial_collision_rates):
+            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, 
+                    f'{value:.1f}%', ha='center', va='bottom')
         
-        if environment == 'spheres':
-            plt.title('Collision rates', fontsize=14)
-            plt.ylim(0, 1.0)
-        else:
-            plt.title('Collision rates (Trees)', fontsize=14)
-            plt.ylim(0, 1.2)
+        # Success rates
+        bars2 = ax2.bar(model_names, success_rates, color=colors, alpha=0.7)
+        ax2.set_ylabel('Success Rate (%)')
+        ax2.set_title('Success Rate by Model')
+        ax2.tick_params(axis='x', rotation=45)
         
-        plt.legend(loc='upper left', frameon=True, fancybox=True, shadow=True)
-        plt.grid(True, alpha=0.3)
+        for bar, value in zip(bars2, success_rates):
+            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, 
+                    f'{value:.1f}%', ha='center', va='bottom')
+        
         plt.tight_layout()
-        
-        filename = f'collision_rates_{environment}'
-        plt.savefig(opj(self.output_dir, f'{filename}.png'), dpi=300, bbox_inches='tight')
-        plt.savefig(opj(self.output_dir, f'{filename}.pdf'), bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'collision_comparison.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'collision_comparison.pdf'), bbox_inches='tight')
         plt.close()
     
-    def create_path_distribution_plot(self):
-        """Create top-down path distribution plot similar to Figure 4c in the paper."""
-        fig, ax = plt.subplots(figsize=(10, 6))
+    def create_trajectory_comparison(self):
+        """Create trajectory path comparison plot."""
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         
-        # Plot paths for each model
-        for model_name, analyzer in self.analyzers.items():
-            config = analyzer.model_config
-            color = config.color
-            
-            # Use data from speed 5 m/s as representative
-            if 5 in analyzer.trajectory_data:
-                trajectories = analyzer.trajectory_data[5]
+        for model_name, loader in self.data_loaders.items():
+            pos_stats = loader.get_position_statistics()
+            if pos_stats is not None:
+                positions = pos_stats['positions']
                 
-                # Column indices based on the CSV structure:
-                # pos_x is column 6, pos_y is column 7
-                x_col, y_col = 6, 7
+                # Sample some trajectories for visualization (to avoid overcrowding)
+                if len(positions) > 1000:
+                    sample_indices = np.random.choice(len(positions), 1000, replace=False)
+                    sample_positions = positions[sample_indices]
+                else:
+                    sample_positions = positions
                 
-                # Plot multiple trajectory samples with transparency
-                for i, traj in enumerate(trajectories[:10]):  # Plot first 10 trials
-                    if traj.shape[1] > max(x_col, y_col):
-                        ax.plot(traj[:, x_col], traj[:, y_col], 
-                               color=color, alpha=0.3, linewidth=1)
+                # XY plot
+                ax1.scatter(sample_positions[:, 0], sample_positions[:, 1], 
+                           c=loader.model_config.color, alpha=0.3, s=1,
+                           label=loader.model_config.name)
                 
-                # Plot mean trajectory
-                if len(trajectories) > 0:
-                    all_x = []
-                    all_y = []
-                    for traj in trajectories:
-                        if traj.shape[1] > max(x_col, y_col):
-                            all_x.append(traj[:, x_col])
-                            all_y.append(traj[:, y_col])
-                    
-                    if all_x:
-                        # Interpolate to common x-axis for averaging
-                        x_common = np.linspace(0, 60, 100)
-                        y_interp = []
-                        
-                        for x, y in zip(all_x, all_y):
-                            if len(x) > 1:
-                                y_interp.append(np.interp(x_common, x, y))
-                        
-                        if y_interp:
-                            y_mean = np.mean(y_interp, axis=0)
-                            ax.plot(x_common, y_mean, color=color, linewidth=2.5, 
-                                   label=config.name)
+                # XZ plot
+                ax2.scatter(sample_positions[:, 0], sample_positions[:, 2], 
+                           c=loader.model_config.color, alpha=0.3, s=1,
+                           label=loader.model_config.name)
         
-        ax.set_xlabel('x (m)', fontsize=12)
-        ax.set_ylabel('y (m)', fontsize=12)
-        ax.set_title('Top-down view of paths', fontsize=14)
-        ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(0, 60)
-        ax.set_ylim(-4, 4)
+        ax1.set_xlabel('X Position (m)')
+        ax1.set_ylabel('Y Position (m)')
+        ax1.set_title('Trajectory Comparison - XY Plane')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        ax2.set_xlabel('X Position (m)')
+        ax2.set_ylabel('Z Position (m)')
+        ax2.set_title('Trajectory Comparison - XZ Plane')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(opj(self.output_dir, 'path_distribution.png'), dpi=300, bbox_inches='tight')
-        plt.savefig(opj(self.output_dir, 'path_distribution.pdf'), bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'trajectory_comparison.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'trajectory_comparison.pdf'), bbox_inches='tight')
         plt.close()
     
-    def create_energy_cost_plot(self):
-        """Create energy cost plot similar to Figure 4d in the paper."""
-        speeds = [3, 4, 5, 6, 7]
+    def create_3d_trajectory_plot(self):
+        """Create 3D trajectory visualization."""
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot(111, projection='3d')
         
-        # Calculate energy costs for each model and speed
-        energy_costs = {}
-        
-        for model_name, analyzer in self.analyzers.items():
-            costs = []
-            for speed in speeds:
-                if speed in analyzer.trajectory_data:
-                    # Calculate energy cost based on velocity commands and accelerations
-                    total_cost = 0
-                    num_trials = len(analyzer.trajectory_data[speed])
-                    
-                    for traj in analyzer.trajectory_data[speed]:
-                        # Column indices based on CSV structure:
-                        # vel_x: 9, vel_y: 10, vel_z: 11
-                        # velcmd_x: 12, velcmd_y: 13, velcmd_z: 14
-                        if traj.shape[1] >= 15:
-                            # Get velocity data
-                            vel_x = traj[:, 9]
-                            vel_y = traj[:, 10]
-                            vel_z = traj[:, 11]
-                            
-                            # Calculate accelerations from velocity
-                            if len(vel_x) > 1:
-                                dt = np.diff(traj[:, 0])  # timestamp differences
-                                dt[dt == 0] = 0.01  # Avoid division by zero
-                                
-                                ax = np.diff(vel_x) / dt
-                                ay = np.diff(vel_y) / dt
-                                az = np.diff(vel_z) / dt
-                                
-                                # Energy proportional to acceleration squared
-                                energy = np.mean(ax**2 + ay**2 + az**2)
-                                total_cost += energy
-                    
-                    avg_cost = total_cost / num_trials if num_trials > 0 else 0
-                    # Scale for visualization (adjust scaling as needed)
-                    costs.append(5.0 + np.sqrt(avg_cost) * 0.5 + (speed - 3) * 0.3)
+        for model_name, loader in self.data_loaders.items():
+            pos_stats = loader.get_position_statistics()
+            if pos_stats is not None:
+                positions = pos_stats['positions']
+                
+                # Sample positions for 3D visualization
+                if len(positions) > 500:
+                    sample_indices = np.random.choice(len(positions), 500, replace=False)
+                    sample_positions = positions[sample_indices]
                 else:
-                    costs.append(5.0 + (speed - 3) * 0.5)
-            
-            energy_costs[model_name] = costs
+                    sample_positions = positions
+                
+                ax.scatter(sample_positions[:, 0], sample_positions[:, 1], sample_positions[:, 2],
+                          c=loader.model_config.color, alpha=0.4, s=2,
+                          label=loader.model_config.name)
         
-        # Create the plot
-        plt.figure(figsize=(8, 6))
+        ax.set_xlabel('X Position (m)')
+        ax.set_ylabel('Y Position (m)')
+        ax.set_zlabel('Z Position (m)')
+        ax.set_title('3D Trajectory Comparison')
+        ax.legend()
         
-        # Plot each model
-        for model_name, costs in energy_costs.items():
-            analyzer = self.analyzers[model_name]
-            config = analyzer.model_config
-            
-            plt.plot(speeds, costs, 
-                    color=config.color, 
-                    marker=config.marker, 
-                    markersize=8, 
-                    linewidth=2, 
-                    label=config.name)
+        # Set reasonable axis limits
+        ax.set_xlim([0, 60])
+        ax.set_ylim([-5, 5])
+        ax.set_zlim([0, 5])
         
-        plt.xlabel('Forward velocity (m/s)', fontsize=12)
-        plt.ylabel('Energy cost (m/s²)', fontsize=12)
-        plt.title('Estimated energy cost', fontsize=14)
-        plt.legend(loc='upper left', frameon=True, fancybox=True, shadow=True)
-        plt.grid(True, alpha=0.3)
-        plt.ylim(5, 12)
         plt.tight_layout()
-        
-        plt.savefig(opj(self.output_dir, 'energy_cost.png'), dpi=300, bbox_inches='tight')
-        plt.savefig(opj(self.output_dir, 'energy_cost.pdf'), bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'trajectory_3d_comparison.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'trajectory_3d_comparison.pdf'), bbox_inches='tight')
         plt.close()
     
     def create_summary_table(self):
-        """Create a summary table of model performance similar to tables in the paper."""
-        speeds = [3, 5, 7]
+        """Create a summary table of all metrics."""
+        summary_data = []
         
-        # Collect success rates
-        success_data = []
+        for model_name, loader in self.data_loaders.items():
+            collision_stats = loader.get_collision_statistics()
+            pos_stats = loader.get_position_statistics()
+            
+            if collision_stats and pos_stats:
+                summary_data.append({
+                    'Model': loader.model_config.name,
+                    'Total Trials': collision_stats['total_trials'],
+                    'Success Rate (%)': collision_stats['success_rate'] * 100,
+                    'Trial Collision Rate (%)': collision_stats['trial_collision_rate'] * 100,
+                    'Timestep Collision Rate (%)': collision_stats['timestep_collision_rate'] * 100,
+                    'Avg Y Position': pos_stats['mean_y'],
+                    'Avg Z Position': pos_stats['mean_z'],
+                    'Y Std Dev': pos_stats['std_y'],
+                    'Z Std Dev': pos_stats['std_z']
+                })
         
-        for model_name, analyzer in self.analyzers.items():
-            for speed in speeds:
-                if speed in analyzer.collision_data:
-                    total_trials = len(analyzer.collision_data[speed])
-                    successful_trials = sum(1 for collision_array in analyzer.collision_data[speed] 
-                                          if not np.any(collision_array))
-                    success_rate = (successful_trials / total_trials * 100) if total_trials > 0 else 0
-                    
-                    success_data.append({
-                        'Model': analyzer.model_config.name,
-                        'Speed (m/s)': speed,
-                        'Success Rate (%)': f"{success_rate:.0f}"
-                    })
+        if not summary_data:
+            print("No data available for summary table")
+            return
         
-        # Create DataFrame
-        df = pd.DataFrame(success_data)
-        df_pivot = df.pivot(index='Model', columns='Speed (m/s)', values='Success Rate (%)')
+        # Create DataFrame and save
+        df = pd.DataFrame(summary_data)
+        df = df.round(3)
+        df.to_csv(opj(self.output_dir, 'model_comparison_summary.csv'), index=False)
         
-        # Save as CSV
-        df_pivot.to_csv(opj(self.output_dir, 'success_rates_table.csv'))
-        
-        # Create a formatted table plot
-        fig, ax = plt.subplots(figsize=(8, 6))
+        # Create table visualization
+        fig, ax = plt.subplots(figsize=(14, 8))
         ax.axis('tight')
         ax.axis('off')
         
-        table = ax.table(cellText=df_pivot.values,
-                         rowLabels=df_pivot.index,
-                         colLabels=df_pivot.columns,
-                         cellLoc='center',
-                         loc='center')
+        # Select key metrics for display
+        display_cols = ['Model', 'Success Rate (%)', 'Trial Collision Rate (%)', 'Y Std Dev', 'Z Std Dev']
+        display_df = df[display_cols]
+        
+        table = ax.table(cellText=display_df.values,
+                        colLabels=display_df.columns,
+                        cellLoc='center',
+                        loc='center')
         
         table.auto_set_font_size(False)
-        table.set_fontsize(12)
-        table.scale(1.2, 1.5)
+        table.set_fontsize(11)
+        table.scale(1.2, 2)
         
         # Style the table
         for (i, j), cell in table.get_celld().items():
             if i == 0:  # Header row
                 cell.set_facecolor('#4CAF50')
                 cell.set_text_props(weight='bold', color='white')
-            elif j == -1:  # Row labels
-                cell.set_facecolor('#E0E0E0')
-                cell.set_text_props(weight='bold')
             else:
-                cell.set_facecolor('#F5F5F5')
+                if j == 0:  # Model name column
+                    cell.set_facecolor('#E8F5E8')
+                    cell.set_text_props(weight='bold')
+                else:
+                    cell.set_facecolor('#F5F5F5')
         
-        plt.title('Success Rates (%) by Model and Speed', fontsize=14, fontweight='bold', pad=20)
+        plt.title('Model Performance Summary', fontsize=16, fontweight='bold', pad=20)
         plt.tight_layout()
         
-        plt.savefig(opj(self.output_dir, 'success_rates_table.png'), dpi=300, bbox_inches='tight')
-        plt.savefig(opj(self.output_dir, 'success_rates_table.pdf'), bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'summary_table.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(opj(self.output_dir, 'summary_table.pdf'), bbox_inches='tight')
         plt.close()
+        
+        print("\nModel Comparison Summary:")
+        print(df.to_string(index=False))
 
 
-def analyze_vit_paper_results(data_directory, output_dir='./vit_paper_plots', 
-                              additional_models=None, exclude_models=None):
+def analyze_model_comparison(data_directory, output_dir='./analysis_plots'):
     """
-    Main function to generate all plots from the Vision Transformer paper.
+    Main function to perform comprehensive model comparison analysis.
     
     Args:
-        data_directory (str): Path to the data directory
-        output_dir (str): Output directory for plots
-        additional_models (dict): Additional models to include 
-                                 Format: {'key': {'name': 'Model Name', 'color': 'red', ...}}
-        exclude_models (list): List of model keys to exclude
+        data_directory (str): Path to the data directory containing model folders
+        output_dir (str): Directory to save analysis plots
     """
-    # Initialize model registry
-    registry = ModelRegistry()
     
-    # Add any additional models
-    if additional_models:
-        for key, config_dict in additional_models.items():
-            config = ModelConfig(**config_dict)
-            registry.add_model(key, config)
+    # Define model configurations based on actual folder structure
+    model_configs = {
+        'expert': ModelConfig('Expert', 'saddlebrown', 'x', '--', 'expert'),
+        'vit': ModelConfig('ViT', 'gray', 's', '-', 'vit'),
+        'vitlstm': ModelConfig('ViT+LSTM', 'green', 'o', '-', 'vitlstm'),
+        'convnet': ModelConfig('ConvNet', 'steelblue', '^', '-', 'convnet'),
+        'robustVitLstm': ModelConfig('RobustViT+LSTM', 'red', 'v', '-', 'robustVitLstm')
+    }
     
-    # Remove excluded models
-    if exclude_models:
-        for key in exclude_models:
-            registry.remove_model(key)
+    # Initialize data loaders
+    data_loaders = {}
     
-    # Save configuration for future reference
-    registry.save_to_file(opj(output_dir, 'model_config.json'))
-    
-    # Initialize analyzers
-    analyzers = {}
-    
-    print("Loading data for Vision Transformer paper analysis...")
+    print("Loading trajectory data for model comparison...")
     print("=" * 60)
     
-    for key, config in registry.get_all_models().items():
+    for key, config in model_configs.items():
         model_path = opj(data_directory, config.folder_name)
         
         if os.path.exists(model_path):
-            analyzer = VisionTransformerAnalyzer(model_path, config)
-            analyzers[config.name] = analyzer
-            print(f"✓ Loaded {config.name}")
+            loader = TrajectoryDataLoader(model_path, config)
+            if loader.trajectory_data:  # Check if data was loaded successfully
+                data_loaders[key] = loader
+                print(f"✓ {config.name}: {len(loader.trajectory_data)} trials loaded")
+            else:
+                print(f"✗ {config.name}: No valid data found")
         else:
             print(f"✗ {config.name}: Directory not found at {model_path}")
     
-    if not analyzers:
-        print("No valid data found!")
+    if not data_loaders:
+        print("No valid data found for any model!")
         return
     
-    print("\nGenerating plots...")
+    print(f"\nGenerating comparison plots for {len(data_loaders)} models...")
     
-    # Initialize plot generator
-    plot_gen = PlotGenerator(analyzers, registry, output_dir)
+    # Initialize comparison plotter
+    plotter = ComparisonPlotter(data_loaders, output_dir)
     
-    # Generate all plots
-    print("- Creating collision rate plots...")
-    plot_gen.create_collision_rate_plots('spheres')
-    plot_gen.create_collision_rate_plots('trees')
+    # Generate all comparison plots
+    print("- Creating collision comparison plots...")
+    plotter.create_collision_comparison()
     
-    print("- Creating path distribution plot...")
-    plot_gen.create_path_distribution_plot()
+    print("- Creating trajectory comparison plots...")
+    plotter.create_trajectory_comparison()
     
-    print("- Creating energy cost plot...")
-    plot_gen.create_energy_cost_plot()
+    print("- Creating 3D trajectory visualization...")
+    plotter.create_3d_trajectory_plot()
     
-    print("- Generating summary statistics...")
-    plot_gen.create_summary_table()
+    print("- Generating summary table...")
+    plotter.create_summary_table()
     
-    print(f"\nAll plots saved to {output_dir}/")
+    print(f"\nAll comparison plots saved to {output_dir}/")
     print("Analysis complete!")
-
-
-def add_new_model_example():
-    """Example of how to add new models to the analysis."""
-    
-    # Define additional models
-    new_models = {
-        'transformer': {
-            'name': 'Transformer',
-            'color': 'purple',
-            'marker': 'D',
-            'linestyle': '-',
-            'folder_name': 'transformer'  # Optional: defaults to lowercase name
-        },
-        'gru': {
-            'name': 'GRU',
-            'color': 'brown',
-            'marker': 'p',
-            'linestyle': ':',
-            'folder_name': 'gru_model'
-        }
-    }
-    
-    # Run analysis with new models
-    analyze_vit_paper_results(
-        data_directory="./data",
-        output_dir="./vit_paper_plots_extended",
-        additional_models=new_models,
-        exclude_models=None  # Or ['expert'] to exclude the expert model
-    )
 
 
 # Main execution
 if __name__ == "__main__":
-    # Standard analysis with default models
+    # Set the data directory path
     data_directory = "./data"
     output_directory = "./analysis_plots"
     
-    # Run the analysis
-    analyze_vit_paper_results(data_directory, output_directory)
+    print("Starting model comparison analysis...")
+    print("=" * 50)
     
-    # Example: Run with custom models
-    # add_new_model_example()
+    # Run the comprehensive analysis
+    analyze_model_comparison(data_directory, output_directory)
+    
+    print("\nAnalysis complete! Check the 'analysis_plots' directory for all visualizations.")

@@ -28,6 +28,7 @@ import torch
 sys.path.append(opj(os.path.dirname(os.path.abspath(__file__)), '../../models'))
 from model import *
 from improved_models import *
+from light_model import CompleteInterpretableModel      
 
 class AgilePilotNode:
     def __init__(self, vision_based=False, model_type=None, model_path=None, desVel=None, keyboard=False):
@@ -79,7 +80,10 @@ class AgilePilotNode:
         self.data_collection_xrange = [2, 60]
 
         # make the folder for the epoch
-        self.folder = f"train_set/{int(time.time()*100)}" 
+        #self.folder = f"train_set/{int(time.time()*100)}" 
+        mode_str = "vision_based" if self.vision_based else "state_based"
+        model_str = f"_{model_type}" if self.vision_based and model_type else ""
+        self.folder = f"train_set/{mode_str}{model_str}_{int(time.time()*100)}"
         os.mkdir(self.folder)
 
         self.desiredVel = desVel #self.readVel("velocity.txt") #np.random.uniform(low=2.0, high=3.0)
@@ -102,13 +106,21 @@ class AgilePilotNode:
             elif model_type == 'ViTLSTM':
                 self.model = LSTMNetVIT().to(self.device).float()
             elif model_type == 'SpatialAttentionViT':
-                self.model = SpatialAttentionViT().to(self.device).float()     
+                self.model = SpatialAttentionViT().to(self.device).float()
+            elif model_type == 'MultiResolutionViT':
+                self.model = MultiResolutionViT().to(self.device).float()
+            elif model_type == 'RobustViTLSTM':
+                self.model = RobustViTLSTM().to(self.device).float()
+            elif model_type == 'TemporalConsistencyLSTM':
+                self.model = TemporalConsistencyLSTM().to(self.device).float()    
+            elif model_type == 'CompleteInterpretableModel':
+                self.model = CompleteInterpretableModel().to(self.device).float()
             else:
                 print(f'[RUN_COMPETITION] Invalid model_type {model_type}. Exiting.')
                 exit()
 
             # Give full path if possible since the bash script runs from outside the folder
-            if model_type == 'EnhancedViT' or model_type == 'EnhancedViTLSTM' :
+            if model_type == 'EnhancedViT' :
                 #权重文件里保存了模型的参数和优化器的状态等，需要处理
                 checkpoint = torch.load(model_path, map_location=self.device)
                 self.model.load_state_dict(checkpoint['model_state_dict'])

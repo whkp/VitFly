@@ -1,0 +1,37 @@
+# 可解释性训练配置文件
+# 这个配置针对轻量级模型进行了优化，减少内存使用
+
+# 基础路径配置
+basedir: "/home/hkp/ws/vitfly_ws/src/vitfly"
+logdir: "training/logs"
+datadir: "/home/hkp/ws/vitfly_ws/src/vitfly/training/datasets"
+dataset: "data"
+ws_suffix: "_interpretable"
+
+# 数据配置
+val_split: 0.2
+short: 0  # 设置为>0的值来使用小数据集进行快速测试，例如500
+seed: 42
+
+# 设备配置
+device: "cuda"
+
+# 训练参数
+lr: 0.0005  # 5e-4，适中的学习率
+N_eps: 50   # 减少训练轮数进行快速测试
+lr_warmup_epochs: 3
+lr_decay: true
+
+# 保存和验证频率
+save_model_freq: 10  # 每10轮保存一次
+val_freq: 5          # 每5轮验证一次
+
+# 可解释性特定配置
+progressive_training: true
+visualization_freq: 20   # 每20轮生成可视化
+adaptive_weights: true
+
+# 检查点配置（如果需要从之前的训练继续）
+load_checkpoint: false
+checkpoint_path: ""
+
