@@ -1,3 +1,18 @@
+#详细的统计分析
+
+# 1. **碰撞对比** (`collision_comparison.png`)
+#    - 试验碰撞率
+#    - 成功率对比
+
+# 2. **轨迹对比** (`trajectory_comparison.png`)
+#    - XY和XZ平面的轨迹散点图对比
+
+# 3. **3D轨迹对比** (`trajectory_3d_comparison.png`)
+#    - 三维空间的模型轨迹对比
+
+# 4. **性能摘要表** (`summary_table.png`, `model_comparison_summary.csv`)
+#    - 详细的模型性能指标表格
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -140,7 +155,7 @@ class TrajectoryDataLoader:
 
 
 class ComparisonPlotter:
-    """Class for creating comparison plots between different models."""
+    """Class for creating comparison plots between   different models."""
     
     def __init__(self, data_loaders, output_dir):
         """

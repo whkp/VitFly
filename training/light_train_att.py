@@ -23,11 +23,20 @@ import traceback
 import pickle
 import configargparse
 
-# 修复matplotlib Qt错误
+# 修复matplotlib Qt错误和中文显示问题
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# 配置中文字体支持
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Liberation Sans']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+# 禁用所有字体相关警告
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from current font.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib.font_manager')
 
 import cv2
 import getpass
@@ -591,7 +600,7 @@ class AttentionVisualizationManager:
             return
             
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-        fig.suptitle('注意力演化分析', fontsize=16)
+        fig.suptitle('Attention Evolution Analysis', fontsize=16)
         
         # 提取不同类型的注意力权重随时间的变化
         vision_entropy = [h.get('vision_entropy', 0) for h in attention_history]
@@ -602,23 +611,23 @@ class AttentionVisualizationManager:
         
         # 视觉注意力熵演化
         axes[0, 0].plot(time_steps, vision_entropy, 'b-o')
-        axes[0, 0].set_title('视觉注意力熵演化')
-        axes[0, 0].set_xlabel('时间步')
-        axes[0, 0].set_ylabel('注意力熵')
+        axes[0, 0].set_title('Vision Attention Entropy Evolution')
+        axes[0, 0].set_xlabel('Time Step')
+        axes[0, 0].set_ylabel('Attention Entropy')
         axes[0, 0].grid(True)
         
         # 规划置信度演化
         axes[0, 1].plot(time_steps, planning_confidence, 'r-s')
-        axes[0, 1].set_title('规划决策置信度演化')
-        axes[0, 1].set_xlabel('时间步')
-        axes[0, 1].set_ylabel('置信度')
+        axes[0, 1].set_title('Planning Confidence Evolution')
+        axes[0, 1].set_xlabel('Time Step')
+        axes[0, 1].set_ylabel('Confidence')
         axes[0, 1].grid(True)
         
         # 安全注意力演化
         axes[0, 2].plot(time_steps, safety_attention, 'g-^')
-        axes[0, 2].set_title('安全注意力演化')
-        axes[0, 2].set_xlabel('时间步')
-        axes[0, 2].set_ylabel('安全权重')
+        axes[0, 2].set_title('Safety Attention Evolution')
+        axes[0, 2].set_xlabel('Time Step')
+        axes[0, 2].set_ylabel('Safety Weight')
         axes[0, 2].grid(True)
         
         # 多模态贡献度演化
@@ -627,12 +636,12 @@ class AttentionVisualizationManager:
             motion_contrib = [h['modal_contributions'].get('motion', 0) for h in attention_history]
             goal_contrib = [h['modal_contributions'].get('goal', 0) for h in attention_history]
             
-            axes[1, 0].plot(time_steps, visual_contrib, 'b-', label='视觉')
-            axes[1, 0].plot(time_steps, motion_contrib, 'r-', label='运动')
-            axes[1, 0].plot(time_steps, goal_contrib, 'g-', label='目标')
-            axes[1, 0].set_title('多模态贡献度演化')
-            axes[1, 0].set_xlabel('时间步')
-            axes[1, 0].set_ylabel('贡献度')
+            axes[1, 0].plot(time_steps, visual_contrib, 'b-', label='Visual')
+            axes[1, 0].plot(time_steps, motion_contrib, 'r-', label='Motion')
+            axes[1, 0].plot(time_steps, goal_contrib, 'g-', label='Goal')
+            axes[1, 0].set_title('Multi-modal Contribution Evolution')
+            axes[1, 0].set_xlabel('Time Step')
+            axes[1, 0].set_ylabel('Contribution')
             axes[1, 0].legend()
             axes[1, 0].grid(True)
         
@@ -647,15 +656,15 @@ class AttentionVisualizationManager:
                 stability_scores.append(stability)
             
             axes[1, 1].plot(range(1, len(attention_history)), stability_scores, 'purple')
-            axes[1, 1].set_title('注意力稳定性')
-            axes[1, 1].set_xlabel('时间步')
-            axes[1, 1].set_ylabel('稳定性分数')
+            axes[1, 1].set_title('Attention Stability')
+            axes[1, 1].set_xlabel('Time Step')
+            axes[1, 1].set_ylabel('Stability Score')
             axes[1, 1].grid(True)
         
         # 整体注意力分布
         if len(attention_history) > 0:
             final_attention = attention_history[-1]
-            attention_components = ['视觉', '多模态', '时序', '规划', '控制']
+            attention_components = ['Vision', 'Multi-modal', 'Temporal', 'Planning', 'Control']
             attention_values = [
                 final_attention.get('vision_attention', 0.2),
                 final_attention.get('multimodal_attention', 0.2),
@@ -665,7 +674,7 @@ class AttentionVisualizationManager:
             ]
             
             axes[1, 2].pie(attention_values, labels=attention_components, autopct='%1.1f%%')
-            axes[1, 2].set_title('最终注意力分布')
+            axes[1, 2].set_title('Final Attention Distribution')
         
         if save_path:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -706,6 +715,24 @@ class COMPLEX_ATTENTION_TRAINER:
             
         else:
             raise Exception("No arguments provided")
+        
+        # 验证checkpoint路径
+        if self.load_checkpoint:
+            if self.checkpoint_path is None:
+                raise ValueError(
+                    "错误：--load_checkpoint 被设置为 True，但未提供 --checkpoint_path。\n"
+                    "请使用：--checkpoint_path /path/to/your/model.pth"
+                )
+            if not os.path.exists(self.checkpoint_path):
+                raise FileNotFoundError(
+                    f"错误：检查点文件不存在: {self.checkpoint_path}\n"
+                    f"请确保路径正确且文件存在。"
+                )
+            if not self.checkpoint_path.endswith('.pth'):
+                raise ValueError(
+                    f"错误：检查点文件应该是 .pth 格式，但得到: {self.checkpoint_path}\n"
+                    f"请提供正确的模型文件路径。"
+                )
 
         # 创建工作空间
         expname = datetime.now().strftime('complex_attention_d%m_%d_t%H_%M')
@@ -754,6 +781,21 @@ class COMPLEX_ATTENTION_TRAINER:
         print(formatted_msg)
         self.logfile.write(formatted_msg + '\n')
         self.logfile.flush()
+    
+    def detach_dict(self, data):
+        """
+        递归地 detach 字典中的所有张量
+        防止反向传播时的计算图引用问题
+        """
+        if isinstance(data, torch.Tensor):
+            return data.detach()
+        elif isinstance(data, dict):
+            return {k: self.detach_dict(v) for k, v in data.items()}
+        elif isinstance(data, (list, tuple)):
+            return type(data)(self.detach_dict(item) for item in data)
+        else:
+            # 对于其他类型（数字、字符串等），直接返回
+            return data
             
     def load_data(self):
         """数据加载 - 与原始版本保持一致"""
@@ -788,17 +830,13 @@ class COMPLEX_ATTENTION_TRAINER:
         self.train_meta, self.train_ims, self.train_trajlength, self.train_desvel, self.train_currquat, self.train_currctbr = train_data
         self.val_meta, self.val_ims, self.val_trajlength, self.val_desvel, self.val_currquat, self.val_currctbr = val_data
         
-        # 生成目标方向
-        self.train_target_dir = self._generate_target_directions(self.train_ims.shape[0])
-        self.val_target_dir = self._generate_target_directions(self.val_ims.shape[0])
-        
-        # 预加载到设备
-        self.train_meta, self.train_ims, self.train_desvel, self.train_currquat, self.train_currctbr, self.train_target_dir = preload(
-            (self.train_meta, self.train_ims, self.train_desvel, self.train_currquat, self.train_currctbr, self.train_target_dir),
+        # 预加载到设备（移除target_dir，使用数据中的实际信息）
+        self.train_meta, self.train_ims, self.train_desvel, self.train_currquat, self.train_currctbr = preload(
+            (self.train_meta, self.train_ims, self.train_desvel, self.train_currquat, self.train_currctbr),
             self.device
         )
-        self.val_meta, self.val_ims, self.val_desvel, self.val_currquat, self.val_currctbr, self.val_target_dir = preload(
-            (self.val_meta, self.val_ims, self.val_desvel, self.val_currquat, self.val_currctbr, self.val_target_dir),
+        self.val_meta, self.val_ims, self.val_desvel, self.val_currquat, self.val_currctbr = preload(
+            (self.val_meta, self.val_ims, self.val_desvel, self.val_currquat, self.val_currctbr),
             self.device
         )
         
@@ -808,15 +846,7 @@ class COMPLEX_ATTENTION_TRAINER:
         
         self.mylogger(f'[数据加载] 训练集: {self.train_ims.shape[0]} 图像, 验证集: {self.val_ims.shape[0]} 图像')
         
-    def _generate_target_directions(self, num_samples):
-        """生成目标方向"""
-        target_directions = np.zeros((num_samples, 3))
-        target_directions[:, 0] = 1.0  # 前进方向
-        noise_scale = 0.15  # 稍微增加噪声以提高泛化
-        target_directions += np.random.normal(0, noise_scale, target_directions.shape)
-        norms = np.linalg.norm(target_directions, axis=1, keepdims=True)
-        target_directions = target_directions / (norms + 1e-8)
-        return target_directions.astype(np.float32)
+
         
     def setup_model_and_training(self):
         """设置模型和训练组件"""
@@ -997,12 +1027,11 @@ class COMPLEX_ATTENTION_TRAINER:
                 if end_idx - start_idx > 12:  # 更小的批次大小
                     end_idx = start_idx + 12
                 
-                # 准备输入
+                # 准备输入（移除target_dir，与LSTMNetVIT保持一致）
                 inputs = [
                     self.train_ims[start_idx:end_idx, :, :].unsqueeze(1),
                     self.train_desvel[start_idx:end_idx].view(-1, 1),
-                    self.train_currquat[start_idx:end_idx],
-                    self.train_target_dir[start_idx:end_idx]
+                    self.train_currquat[start_idx:end_idx]
                 ]
                 
                 # 前向传播
@@ -1032,11 +1061,10 @@ class COMPLEX_ATTENTION_TRAINER:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
                 self.optimizer.step()
                 
-                # 存储当前输出用于时序稳定性
+                # 存储当前输出用于时序稳定性（递归 detach 所有张量）
                 self.previous_model_outputs = {
                     'velocity_cmd': velocity_cmd.detach(),
-                    'intermediates': {k: v.detach() if torch.is_tensor(v) else v 
-                                   for k, v in intermediates.items()}
+                    'intermediates': self.detach_dict(intermediates)
                 }
                 
                 # 更新统计
@@ -1122,8 +1150,7 @@ class COMPLEX_ATTENTION_TRAINER:
                 sample_input = [
                     self.val_ims[:1, :, :].unsqueeze(1),
                     self.val_desvel[:1].view(-1, 1),
-                    self.val_currquat[:1],
-                    self.val_target_dir[:1]
+                    self.val_currquat[:1]
                 ]
                 
                 velocity_cmd, intermediates = self.model(sample_input, return_intermediates=True)
@@ -1168,6 +1195,11 @@ class COMPLEX_ATTENTION_TRAINER:
         """验证函数"""
         self.mylogger(f'[验证] 开始验证 (轮次 {ep})')
         
+        # 如果没有验证数据，跳过验证
+        if self.num_val_steps == 0:
+            self.mylogger('[验证] 警告: 没有验证数据，跳过验证')
+            return float('inf')  # 返回无穷大，表示验证损失无效
+        
         val_start = time.time()
         val_metrics = {}
         
@@ -1189,8 +1221,7 @@ class COMPLEX_ATTENTION_TRAINER:
                 inputs = [
                     self.val_ims[start_idx:end_idx, :, :].unsqueeze(1),
                     self.val_desvel[start_idx:end_idx].view(-1, 1),
-                    self.val_currquat[start_idx:end_idx],
-                    self.val_target_dir[start_idx:end_idx]
+                    self.val_currquat[start_idx:end_idx]
                 ]
                 
                 velocity_cmd, intermediates = self.model(inputs, hidden_state, return_intermediates=True)
@@ -1253,9 +1284,9 @@ def argparsing():
     
     # 基础参数
     parser.add_argument('--config', is_config_file=True, default='config/complex_attention.yaml', help='配置文件路径')
-    parser.add_argument('--basedir', type=str, default=f'/home/{getpass.getuser()}/ws/vitfly_ws/src/vitfly', help='基础目录')
+    parser.add_argument('--basedir', type=str, default=f'/home/{getpass.getuser()}/catkin_ws/src/vitfly/src/vitfly', help='基础目录')
     parser.add_argument('--logdir', type=str, default='training/logs', help='日志目录')
-    parser.add_argument('--datadir', type=str, default=f'/home/{getpass.getuser()}/ws/vitfly_ws/src/vitfly/training/datasets', help='数据目录')
+    parser.add_argument('--datadir', type=str, default=f'/home/{getpass.getuser()}/catkin_ws/src/vitfly/src/vitfly/training/datasets', help='数据目录')
     parser.add_argument('--ws_suffix', type=str, default='', help='工作空间后缀')
     parser.add_argument('--dataset', type=str, default='data', help='数据集名称')
     parser.add_argument('--short', type=int, default=0, help='短数据集大小')
@@ -1263,7 +1294,7 @@ def argparsing():
     parser.add_argument('--seed', type=int, default=None, help='随机种子')
     parser.add_argument('--device', type=str, default='cuda', help='设备')
     parser.add_argument('--load_checkpoint', action='store_true', default=False, help='加载检查点')
-    parser.add_argument('--checkpoint_path', type=str, default='', help='检查点路径')
+    parser.add_argument('--checkpoint_path', type=str, default=None, help='检查点文件路径（.pth文件），需要与--load_checkpoint一起使用')
     
     # 训练参数 - 针对复杂注意力模型调整
     parser.add_argument('--lr', type=float, default=5e-4, help='学习率')  # 较低的学习率

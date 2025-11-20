@@ -1,6 +1,0 @@
-Model,Collision Rate (%),Collision Events,Avg Collision Duration,Avg Y Variation,Avg Z Variation,Trajectory Smoothness,Safety Score
-Expert,6.54,5,14.4,0.717,0.497,0.452,93.46
-ViT,6.86,10,7.1,1.086,0.318,0.416,93.14
-ViT+LSTM,3.284,6,5.5,0.506,0.566,0.483,96.716
-ConvNet,3.184,8,4.0,0.574,0.461,0.491,96.816
-RobustViT+LSTM,3.478,8,4.5,0.843,0.693,0.394,96.522

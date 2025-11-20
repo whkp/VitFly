@@ -110,13 +110,14 @@ class EnhancedViTEncoder(nn.Module):
         ])
         
         # 可解释性注意力模块
+        # d_model=12 因为 compressed 的通道数是12
         self.interpretable_attention = InterpretableMultiHeadAttention(
-            d_model=64, num_heads=8, dropout=0.1
+            d_model=12, num_heads=4, dropout=0.1  # 4个头，每个头3维
         )
         
         # 空间注意力分析器
         self.spatial_attention = nn.MultiheadAttention(
-            embed_dim=64, num_heads=4, dropout=0.1, batch_first=True
+            embed_dim=12, num_heads=4, dropout=0.1, batch_first=True
         )
         
         # 上采样和处理（保持原始设计）
@@ -216,27 +217,27 @@ class MultiModalAttentionFusion(nn.Module):
         self.motion_dim = motion_dim
         self.goal_dim = goal_dim
         
-        # 模态编码器
-        self.visual_encoder = nn.Linear(visual_dim, 256)
-        self.motion_encoder = nn.Linear(motion_dim + 1, 64)  # +1 for desired velocity
-        self.goal_encoder = nn.Linear(goal_dim, 64)
+        # 统一的特征维度
+        unified_dim = 128
         
-        # 交叉注意力模块
-        self.visual_to_motion_attention = nn.MultiheadAttention(
-            embed_dim=256, num_heads=8, dropout=0.1, batch_first=True
-        )
-        self.motion_to_visual_attention = nn.MultiheadAttention(
-            embed_dim=64, num_heads=4, dropout=0.1, batch_first=True
+        # 模态编码器 - 统一投影到相同维度
+        self.visual_encoder = nn.Linear(visual_dim, unified_dim)
+        self.motion_encoder = nn.Linear(motion_dim + 1, unified_dim)  # +1 for desired velocity
+        self.goal_encoder = nn.Linear(goal_dim, unified_dim)
+        
+        # 自注意力模块（统一维度后可以使用）
+        self.modality_attention = nn.MultiheadAttention(
+            embed_dim=unified_dim, num_heads=8, dropout=0.1, batch_first=True
         )
         
         # 融合注意力
         self.fusion_attention = InterpretableMultiHeadAttention(
-            d_model=384, num_heads=6, dropout=0.1  # 256 + 64 + 64
+            d_model=unified_dim * 3, num_heads=6, dropout=0.1  # 3个模态拼接
         )
         
         # 输出投影
         self.output_projection = nn.Sequential(
-            nn.Linear(384, 256),
+            nn.Linear(unified_dim * 3, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(256, 128)
@@ -245,26 +246,26 @@ class MultiModalAttentionFusion(nn.Module):
     def forward(self, visual_features, motion_state, goal_direction, desired_velocity):
         batch_size = visual_features.shape[0]
         
-        # 编码各模态
-        vis_encoded = self.visual_encoder(visual_features).unsqueeze(1)  # (B, 1, 256)
+        # 编码各模态到统一维度
+        vis_encoded = self.visual_encoder(visual_features).unsqueeze(1)  # (B, 1, 128)
         
         motion_input = torch.cat([motion_state, desired_velocity], dim=1)
-        motion_encoded = self.motion_encoder(motion_input).unsqueeze(1)  # (B, 1, 64)
+        motion_encoded = self.motion_encoder(motion_input).unsqueeze(1)  # (B, 1, 128)
         
-        goal_encoded = self.goal_encoder(goal_direction).unsqueeze(1)  # (B, 1, 64)
+        goal_encoded = self.goal_encoder(goal_direction).unsqueeze(1)  # (B, 1, 128)
         
-        # 交叉注意力
-        vis_attended, vis_motion_attn = self.visual_to_motion_attention(
-            vis_encoded, motion_encoded, motion_encoded
+        # 拼接所有模态
+        all_modalities = torch.cat([
+            vis_encoded, motion_encoded, goal_encoded
+        ], dim=1)  # (B, 3, 128)
+        
+        # 多模态自注意力
+        attended_modalities, modality_attn = self.modality_attention(
+            all_modalities, all_modalities, all_modalities
         )
-        motion_attended, motion_vis_attn = self.motion_to_visual_attention(
-            motion_encoded, vis_encoded, vis_encoded
-        )
         
-        # 拼接所有特征
-        fused_input = torch.cat([
-            vis_attended, motion_attended, goal_encoded
-        ], dim=2)  # (B, 1, 384)
+        # 展平拼接（使用reshape代替view以避免内存布局问题）
+        fused_input = attended_modalities.reshape(batch_size, 1, -1)  # (B, 1, 384)
         
         # 融合注意力
         final_features, fusion_attention = self.fusion_attention(
@@ -277,14 +278,13 @@ class MultiModalAttentionFusion(nn.Module):
         return {
             'fused_features': output,
             'attention_weights': {
-                'visual_to_motion': vis_motion_attn,
-                'motion_to_visual': motion_vis_attn,
+                'modality_attention': modality_attn,
                 'fusion_attention': fusion_attention
             },
             'modality_contributions': {
-                'visual': torch.norm(vis_attended, dim=2),
-                'motion': torch.norm(motion_attended, dim=2),
-                'goal': torch.norm(goal_encoded, dim=2)
+                'visual': torch.norm(attended_modalities[:, 0], dim=1),
+                'motion': torch.norm(attended_modalities[:, 1], dim=1),
+                'goal': torch.norm(attended_modalities[:, 2], dim=1)
             }
         }
 
@@ -536,26 +536,48 @@ class ComplexAttentionInterpretableModel(nn.Module):
         
         # 全局注意力协调器
         self.global_attention_coordinator = nn.Sequential(
-            nn.Linear(128 + 64 + 64, 128),  # 各模块的特征维度
+            nn.Linear(128 + 64 + 64, 128),  # 多模态特征+时序特征+视觉特征的前64维
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 1),
             nn.Sigmoid()
         )
+    
+    def _quat_to_direction(self, quat):
+        """
+        将四元数转换为前向方向向量
+        四元数格式: [w, x, y, z] 或 [x, y, z, w]
+        返回: 单位前向方向向量 (batch, 3)
+        """
+        batch_size = quat.shape[0]
+        
+        # 假设四元数格式为 [w, x, y, z]
+        w, x, y, z = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
+        
+        # 计算前向方向向量（机体坐标系的x轴在世界坐标系中的表示）
+        forward_x = 1 - 2*(y**2 + z**2)
+        forward_y = 2*(x*y + w*z)
+        forward_z = 2*(x*z - w*y)
+        
+        # 组合并归一化
+        direction = torch.stack([forward_x, forward_y, forward_z], dim=1)
+        direction = F.normalize(direction, p=2, dim=1)
+        
+        return direction
         
     def forward(self, inputs, hidden_state=None, return_intermediates=False):
         """
         复杂的前向传播 - 完整的注意力流程
+        输入格式：[图像, 期望速度, 四元数] - 与LSTMNetVIT保持一致
         """
         # 处理输入格式兼容性
-        if isinstance(inputs, list) and len(inputs) >= 4:
+        if isinstance(inputs, list) and len(inputs) >= 3:
             images = inputs[0]
             desired_vel = inputs[1]
             curr_quat = inputs[2]
-            target_dir = inputs[3] if len(inputs) > 3 else torch.zeros_like(curr_quat[:, :3])
         else:
-            raise ValueError("Invalid input format")
+            raise ValueError("Invalid input format. Expected [images, desired_vel, curr_quat]")
             
         # 确保维度正确
         if len(images.shape) == 5:  # 序列输入
@@ -572,7 +594,11 @@ class ComplexAttentionInterpretableModel(nn.Module):
         vision_output = self.vision_encoder(refined_inputs[0])
         
         # 2. 多模态注意力融合
-        motion_state = curr_quat  # 简化的运动状态
+        # 从四元数推导运动方向作为目标方向
+        # 四元数表示的是当前朝向，我们将其转换为方向向量
+        motion_state = curr_quat
+        target_dir = self._quat_to_direction(curr_quat)  # 从四元数推导方向
+        
         fusion_output = self.multimodal_fusion(
             vision_output['visual_features'],
             motion_state,
@@ -633,7 +659,10 @@ class ComplexAttentionInterpretableModel(nn.Module):
                 },
                 'motion_planning': {
                     'primitive_probabilities': planning_output['primitive_probabilities'],
-                    'motion_parameters': planning_output['motion_parameters'][:, :4]  # 取前4个参数
+                    'motion_parameters': planning_output['motion_parameters'][:, :4],  # 取前4个参数
+                    'high_level_strategy': planning_output['high_level_strategy'],
+                    'attention_weights': planning_output['attention_weights'],
+                    'selected_primitive': planning_output['selected_primitive']
                 },
                 'min_obstacle_distance': min_obstacle_distance
             }
@@ -757,13 +786,12 @@ if __name__ == '__main__':
     # 创建模型
     model = ComplexAttentionInterpretableModel(sequence_length=5)
     
-    # 测试输入
+    # 测试输入 - 与LSTMNetVIT保持一致的格式
     batch_size = 2
     test_inputs = [
         torch.randn(batch_size, 1, 60, 90),  # 图像
         torch.tensor([[1.5], [2.0]]),        # 期望速度
-        torch.randn(batch_size, 4),          # 四元数
-        torch.tensor([[1.0, 0.0, 0.0], [0.7, 0.7, 0.0]])  # 目标方向
+        torch.randn(batch_size, 4)           # 四元数（目标方向将从四元数推导）
     ]
     
     with torch.no_grad():

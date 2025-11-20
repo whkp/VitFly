@@ -1,37 +1,123 @@
-# 可解释性训练配置文件
-# 这个配置针对轻量级模型进行了优化，减少内存使用
+# 复杂注意力可解释模型训练配置文件
+# 针对 ComplexAttentionInterpretableModel 设计
+# 基于 LSTMNetVIT 成功架构，增强注意力机制和可解释性
 
+# ============================================================================
 # 基础路径配置
-basedir: "/home/hkp/ws/vitfly_ws/src/vitfly"
+# ============================================================================
+basedir: "/home/namy/catkin_ws/src/vitfly"
 logdir: "training/logs"
-datadir: "/home/hkp/ws/vitfly_ws/src/vitfly/training/datasets"
+datadir: "/home/namy/catkin_ws/src/vitfly/training/datasets"
 dataset: "data"
-ws_suffix: "_interpretable"
+ws_suffix: "_complex_attention"
 
+# ============================================================================
 # 数据配置
-val_split: 0.2
-short: 0  # 设置为>0的值来使用小数据集进行快速测试，例如500
-seed: 42
+# ============================================================================
+val_split: 0.2      # 验证集比例（20%）
+short: 0            # 数据集大小限制（0=使用全部数据，>0=仅使用前N个轨迹进行快速测试）
+seed: 42            # 随机种子（用于可复现性）
 
+# ============================================================================
 # 设备配置
-device: "cuda"
+# ============================================================================
+device: "cuda"      # 训练设备（cuda/cpu）
 
-# 训练参数
-lr: 0.0005  # 5e-4，适中的学习率
-N_eps: 50   # 减少训练轮数进行快速测试
-lr_warmup_epochs: 3
-lr_decay: true
+# ============================================================================
+# 检查点配置
+# ============================================================================
+load_checkpoint: false                  # 是否从检查点加载
+checkpoint_path: null                   # 检查点文件路径（.pth文件）
+                                       # 示例: "/home/namy/catkin_ws/src/vitfly/training/logs/complex_attention_d11_17_t10_30/complex_attention_model_000050.pth"
 
+# ============================================================================
+# 训练参数 - 针对复杂注意力模型优化
+# ============================================================================
+lr: 0.0005              # 学习率（5e-4，较低的学习率适合复杂模型）
+N_eps: 200              # 训练轮数（更多轮数以充分训练注意力机制）
+lr_warmup_epochs: 15    # 学习率预热轮数（逐渐增加学习率）
+lr_decay: true          # 启用学习率衰减（使用 CosineAnnealingWarmRestarts）
+
+# ============================================================================
 # 保存和验证频率
-save_model_freq: 10  # 每10轮保存一次
-val_freq: 5          # 每5轮验证一次
+# ============================================================================
+save_model_freq: 25     # 模型保存频率（每N轮保存一次）
+val_freq: 5             # 验证频率（每N轮验证一次）
 
-# 可解释性特定配置
-progressive_training: true
-visualization_freq: 20   # 每20轮生成可视化
-adaptive_weights: true
+# ============================================================================
+# 复杂注意力训练特有参数
+# ============================================================================
+attention_visualization_freq: 25    # 注意力可视化频率（每N轮生成可视化）
+staged_training: true               # 分阶段训练策略（逐步调整损失权重）
+attention_loss_scheduling: true     # 注意力损失调度（动态调整各损失项权重）
+early_stopping_patience: 30         # 早停耐心值（验证损失N轮未改善则停止）
 
-# 检查点配置（如果需要从之前的训练继续）
-load_checkpoint: false
-checkpoint_path: ""
+# ============================================================================
+# 预设配置方案
+# ============================================================================
+# 以下是不同场景的推荐配置，可以直接复制使用
 
+# 方案1：快速测试配置（验证环境和代码）
+# short: 10
+# N_eps: 5
+# val_freq: 1
+# save_model_freq: 2
+# attention_visualization_freq: 2
+
+# 方案2：小规模训练配置（快速迭代实验）
+# short: 100
+# N_eps: 50
+# val_freq: 5
+# save_model_freq: 10
+# attention_visualization_freq: 10
+
+# 方案3：标准训练配置（推荐用于正式训练）
+# short: 0
+# N_eps: 200
+# val_freq: 5
+# save_model_freq: 25
+# attention_visualization_freq: 25
+
+# 方案4：长期精细训练配置（追求最佳性能）
+# short: 0
+# N_eps: 300
+# lr: 0.0003
+# val_freq: 3
+# save_model_freq: 20
+# attention_visualization_freq: 30
+# early_stopping_patience: 50
+
+# 方案5：从检查点继续训练（微调）
+# load_checkpoint: true
+# checkpoint_path: "/path/to/your/best_model.pth"
+# lr: 0.0001
+# N_eps: 50
+# val_freq: 2
+# early_stopping_patience: 15
+
+# ============================================================================
+# 注意事项
+# ============================================================================
+# 1. GPU内存管理：代码已设置使用60%的GPU内存
+#    如需调整，修改代码中的 torch.cuda.set_per_process_memory_fraction(0.6)
+#
+# 2. 批次大小：训练批次限制为12帧，验证批次限制为6帧
+#    如GPU内存充足，可在代码中增大这些限制
+#
+# 3. 验证频率：过于频繁的验证会降低训练速度
+#    建议 val_freq >= 5
+#
+# 4. 可视化频率：注意力可视化较耗时
+#    建议 attention_visualization_freq >= 25
+#
+# 5. 学习率调度：使用 CosineAnnealingWarmRestarts
+#    T_0=20, T_mult=2, 会自动重启学习率
+#
+# 6. 早停机制：验证损失 early_stopping_patience 轮未改善则停止
+#    可根据训练稳定性调整（稳定则减小，波动则增大）
+#
+# 7. 数据集格式：确保数据集符合要求
+#    详见 training/README.md
+#
+# 8. 模型输入：当前模型使用 [图像, 期望速度, 四元数]
+#    目标方向从四元数推导，详见 models/MODEL_INPUT_CHANGES.md

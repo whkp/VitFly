@@ -484,9 +484,9 @@ def argparsing():
 
     # 原始参数 - 保持与原始代码相同
     parser.add_argument('--config', is_config_file=True, help='配置文件相对路径')
-    parser.add_argument('--basedir', type=str, default=f'/home/{uname}/ws/vitfly_ws/src/vitfly', help='仓库路径')
+    parser.add_argument('--basedir', type=str, default=f'/home/{uname}/catkin_ws/src/vitfly', help='仓库路径')
     parser.add_argument('--logdir', type=str, default='training/logs', help='相对日志目录路径')
-    parser.add_argument('--datadir', type=str, default=f'/home/{uname}/ws/vitfly_ws/src/vitfly/training/datasets', help='相对数据集目录路径')
+    parser.add_argument('--datadir', type=str, default=f'/home/{uname}/catkin_ws/src/vitfly/training/datasets', help='相对数据集目录路径')
     
     parser.add_argument('--ws_suffix', type=str, default='', help='工作空间名称的后缀')
     parser.add_argument('--model_type', type=str, default='RobustViTLSTM', 
@@ -499,7 +499,7 @@ def argparsing():
     parser.add_argument('--device', type=str, default='cuda', help='训练设备')
     parser.add_argument('--load_checkpoint', action='store_true', default=False, help='是否从检查点加载')
     parser.add_argument('--checkpoint_path', type=str, 
-                       default=f'/home/{uname}/ws/vitfly_ws/src/vitfly/training/logs/improved_model_000499.pth', 
+                       default=f'/home/{uname}/catkin_ws/src/vitfly/training/logs/improved_model_000499.pth', 
                        help='检查点路径')
     parser.add_argument('--lr', type=float, default=1e-4, help='学习率')
     parser.add_argument('--N_eps', type=int, default=100, help='训练轮数')
@@ -509,7 +509,7 @@ def argparsing():
     parser.add_argument('--val_freq', type=int, default=10, help='验证频率')
 
     # 新增的改进参数
-    parser.add_argument('--improvement_type', type=str, default='spatial_attention', 
+    parser.add_argument('--improvement_type', type=str, default='robustness', 
                        choices=['spatial_attention', 'temporal_consistency', 'multi_resolution', 'robustness'],
                        help='改进类型标识')
     parser.add_argument('--gradient_clip_value', type=float, default=1.0, help='梯度裁剪阈值')

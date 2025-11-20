@@ -18,7 +18,7 @@ import sys, os
 import time
 import torch
 
-DEPTHFLY_PATH='/home/anish/vitfly_ws/src/vitfly/depthfly/'
+DEPTHFLY_PATH='/home/namy/catkin_ws/src/vitfly/depthfly/'
 
 sys.path.append(DEPTHFLY_PATH+'../models')
 from model import *

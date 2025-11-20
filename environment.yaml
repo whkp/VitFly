@@ -1,0 +1,27 @@
+name: vitfly-env
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  # PyTorch 相关
+  - pytorch=1.13.1
+  - torchvision=0.14.1
+  - torchaudio=0.13.1
+  - pytorch-cuda=11.7
+  # 科学计算和数据处理
+  - numpy=1.24.3
+  # 可视化
+  - matplotlib=3.7.1
+  - seaborn=0.12.2
+  # 训练和日志
+  - tensorboard=2.12.1
+  # 配置和参数解析
+  - configargparse=1.5.3
+  # 图像处理
+  - opencv=4.7.0
+  # 其他工具
+  - pip
+  - pip:

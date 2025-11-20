@@ -8,3 +8,5 @@ analysis/data/*
 envtest/ros/train_set/*
 envtest/ros/evaluate/*
 flightmare/flightpy/configs/vision/config.yaml
+training/logs/*
+training/datasets/*
